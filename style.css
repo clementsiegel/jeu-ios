@@ -77,10 +77,13 @@ body {
 }
 
 /* ---------- HUD (score, record, niveau) ---------- */
+/* Haut de l'écran : on descend sous l'encoche / la Dynamic Island des iPhone,
+   avec une marge en plus (iOS floute légèrement le bas de la barre d'état).
+   Sur ordinateur, env(safe-area-inset-top) vaut 0 : on garde 14px. */
 #hud {
   position: absolute;
   z-index: 2;
-  top: max(12px, env(safe-area-inset-top));
+  top: calc(14px + env(safe-area-inset-top, 0px) * 1.25);
   left: max(16px, env(safe-area-inset-left));
   display: flex;
   gap: 22px;
@@ -93,11 +96,15 @@ body {
   line-height: 1.1;
 }
 
+/* Texte du HUD : contour sombre net + halo léger, pour rester lisible
+   par-dessus les étoiles sans paraître flou sur les écrans de téléphone */
 .hud-label {
   font-size: 11px;
-  letter-spacing: 0.18em;
+  font-weight: 600;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: #b9c4e4;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
 .hud-value {
@@ -106,24 +113,24 @@ body {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--cyan);
-  text-shadow: 0 0 10px rgba(62, 242, 255, 0.6);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(62, 242, 255, 0.45);
 }
 
 .hud-best {
   color: var(--yellow);
-  text-shadow: 0 0 10px rgba(255, 225, 77, 0.5);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(255, 225, 77, 0.4);
 }
 
 .hud-level {
   color: var(--pink);
-  text-shadow: 0 0 10px rgba(255, 61, 139, 0.5);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 6px rgba(255, 61, 139, 0.4);
 }
 
 /* ---------- Bonus actifs (sous le score) ---------- */
 #powerups {
   position: absolute;
   z-index: 2;
-  top: calc(max(12px, env(safe-area-inset-top)) + 58px);
+  top: calc(72px + env(safe-area-inset-top, 0px) * 1.25);
   left: max(16px, env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
@@ -242,7 +249,7 @@ body {
 #top-buttons {
   position: absolute;
   z-index: 5;
-  top: max(12px, env(safe-area-inset-top));
+  top: calc(14px + env(safe-area-inset-top, 0px) * 1.25);
   right: max(16px, env(safe-area-inset-right));
   display: flex;
   gap: 10px;
@@ -317,7 +324,7 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgba(62, 242, 255, 0.3) transparent;
   /* Laisse la place à l'encoche et à la barre du bas des iPhone */
-  padding: calc(64px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  padding: calc(72px + env(safe-area-inset-top, 0px) * 1.25) 16px calc(24px + env(safe-area-inset-bottom, 0px));
   background: radial-gradient(ellipse at 50% 40%, rgba(40, 10, 90, 0.45), rgba(3, 0, 12, 0.88) 70%);
   opacity: 0;
   visibility: hidden;
