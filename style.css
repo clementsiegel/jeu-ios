@@ -840,6 +840,322 @@ kbd {
   50%      { transform: scale(1.06); }
 }
 
+/* ---------- Barre sous le niveau (contre-la-montre, boss) ---------- */
+.hud-bar {
+  display: block;
+  width: 100%;
+  min-width: 46px;
+  height: 3px;
+  margin-top: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.hud-bar i {
+  display: block;
+  height: 100%;
+  background: var(--pink);
+  transform-origin: left center;
+}
+
+/* ---------- Notification de succès ---------- */
+.toast {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 120px; /* repositionné par game.js sous le score et les bonus */
+  max-width: min(90vw, 420px);
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--yellow);
+  background: rgba(12, 6, 34, 0.88);
+  color: var(--yellow);
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center;
+  box-shadow: 0 0 18px rgba(255, 225, 77, 0.35);
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: toast-in 0.35s ease-out both;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ---------- Tutoriel ---------- */
+.tuto {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 26%;
+  width: min(88vw, 420px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--panel-border);
+  background: rgba(12, 6, 34, 0.82);
+  text-align: center;
+  transform: translateX(-50%);
+  pointer-events: none; /* le pouce peut toucher l'écran à travers : seul "Passer" est cliquable */
+}
+
+.tuto-step {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tuto-text {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.tuto .btn {
+  pointer-events: auto;
+}
+
+.btn-small {
+  min-height: 36px;
+  padding: 7px 16px;
+  font-size: 14px;
+}
+
+/* ---------- Écran des modes ---------- */
+.modes {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  text-align: left;
+}
+
+.mode-card {
+  display: grid;
+  gap: 3px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1.5px solid var(--panel-border);
+  background: var(--panel-bg);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.mode-card:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 0 16px -4px var(--cyan);
+}
+
+.mode-card:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+.mode-name {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.mode-daily .mode-name { color: var(--yellow); }
+.mode-timeattack .mode-name { color: var(--pink); }
+.mode-zen .mode-name { color: #4dffa6; }
+
+.mode-desc {
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.mode-best {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.mode-best b {
+  font-family: var(--mono);
+  color: var(--yellow);
+}
+
+/* ---------- Écran des succès ---------- */
+.achievements {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+  text-align: left;
+}
+
+.ach {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+}
+
+.ach-icon {
+  grid-row: span 3;
+  font-size: 20px;
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+
+.ach.done {
+  border-color: rgba(255, 225, 77, 0.6);
+  box-shadow: 0 0 12px -4px rgba(255, 225, 77, 0.6);
+}
+
+.ach.done .ach-icon {
+  filter: none;
+  opacity: 1;
+}
+
+.ach-name {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.ach.done .ach-name {
+  color: var(--yellow);
+}
+
+.ach-desc {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.ach-progress {
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ach-progress i {
+  display: block;
+  height: 100%;
+  background: var(--yellow);
+  transform-origin: left center;
+}
+
+.ach-badge {
+  display: inline-block;
+  margin: 4px 0 6px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--yellow);
+  color: var(--yellow);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+/* ---------- Écran des réglages ---------- */
+.settings {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  text-align: left;
+}
+
+.setting {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+}
+
+.setting-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.setting-name small {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.setting input[type="range"] {
+  grid-column: 1;
+  width: 100%;
+  accent-color: var(--cyan);
+}
+
+.setting output {
+  grid-column: 2;
+  min-width: 3ch;
+  font-family: var(--mono);
+  color: var(--cyan);
+  text-align: right;
+}
+
+.setting-check input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--cyan);
+}
+
+.segmented {
+  display: flex;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  overflow: hidden;
+}
+
+.segmented button {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 700 13px var(--font);
+  cursor: pointer;
+}
+
+.segmented button.active {
+  background: var(--cyan);
+  color: #04121a;
+}
+
+/* Légende du menu : nouveaux dangers */
+.dot-mine { background: radial-gradient(circle, #ffe0d0 0 25%, #ff4a3d 30%); box-shadow: 0 0 8px #ff4a3d; }
+.dot-hole { background: radial-gradient(circle, #05010f 0 40%, #ff2dd2 60%); box-shadow: 0 0 8px #ff2dd2; }
+.dot-boss { border-radius: 3px; background: #ff2d6f; box-shadow: 0 0 8px #ff2d6f; transform: rotate(45deg); }
+
+/* Réglage "réduire les effets" : coupe aussi les animations de l'interface */
+.reduce-fx .title,
+.reduce-fx .record-badge,
+.reduce-fx .unlock-badge,
+.reduce-fx .combo.hot .combo-mult,
+.reduce-fx .ship-tile.shake,
+.reduce-fx .pu-chip.ending,
+.reduce-fx .toast,
+.reduce-fx #screen-gameover.visible .panel,
+.reduce-fx #screen-gameover.visible .gameover-title,
+.reduce-fx #screen-pause.visible .panel {
+  animation: none;
+}
+
 .noscript {
   position: absolute;
   inset: auto 16px 40%;
@@ -885,7 +1201,7 @@ kbd {
   }
 
   .menu-actions .btn:not(.btn-primary) {
-    flex: 1;
+    flex: 1 1 calc(50% - 6px); /* deux boutons par ligne */
     padding: 12px 10px;
   }
 
@@ -900,6 +1216,21 @@ kbd {
 
   .ships {
     gap: 8px;
+  }
+
+  .achievements {
+    grid-template-columns: 1fr;
+  }
+
+  .setting {
+    padding: 10px 12px;
+  }
+}
+
+/* Menu sur ordinateur : les 5 boutons tiennent sur une ligne */
+@media (min-width: 681px) {
+  .menu-actions .btn:not(.btn-primary) {
+    padding: 12px 18px;
   }
 }
 

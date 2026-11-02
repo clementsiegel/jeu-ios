@@ -37,9 +37,21 @@
         <span class="hud-value hud-best" id="hud-best">0</span>
       </div>
       <div class="hud-item">
-        <span class="hud-label">Niveau</span>
+        <!-- Niveau, ou temps restant (contre-la-montre / boss) -->
+        <span class="hud-label" id="hud-level-label">Niveau</span>
         <span class="hud-value hud-level" id="hud-level">1</span>
+        <span class="hud-bar hidden" id="hud-bar"><i id="hud-bar-fill"></i></span>
       </div>
+    </div>
+
+    <!-- Notification de succès (placée sous le score par game.js) -->
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+    <!-- Tutoriel du premier lancement -->
+    <div id="tuto" class="tuto hidden" role="status" aria-live="polite">
+      <span class="tuto-step" id="tuto-step">Étape 1/3</span>
+      <span class="tuto-text" id="tuto-text">Déplace-toi</span>
+      <button type="button" id="btn-tuto-skip" class="btn btn-small">Passer</button>
     </div>
 
     <!-- Sous le score : combo en cours, puis bonus actifs (remplis par game.js) -->
@@ -73,8 +85,10 @@
 
         <div class="menu-actions">
           <button type="button" id="btn-play" class="btn btn-primary">Jouer</button>
-          <button type="button" id="btn-daily" class="btn btn-daily">Défi du jour</button>
+          <button type="button" id="btn-modes" class="btn btn-daily">Modes</button>
           <button type="button" id="btn-ships" class="btn">Vaisseaux</button>
+          <button type="button" id="btn-achievements" class="btn">Succès</button>
+          <button type="button" id="btn-settings" class="btn">Réglages</button>
         </div>
         <p class="best-line">Record : <strong id="menu-best">0</strong> · Défi du jour : <strong id="menu-daily" class="daily-best">0</strong></p>
 
@@ -110,14 +124,15 @@
           <div class="card">
             <h2>À savoir</h2>
             <ul class="legend">
-              <li><i class="dot dot-player"></i><span><b>Toi</b> : ton vaisseau (à choisir dans « Vaisseaux »)</span></li>
-              <li><i class="dot dot-shard"></i><span><b>Éclats</b> : ne les touche pas</span></li>
-              <li><i class="dot dot-seeker"></i><span><b>Traqueurs</b> : ils te suivent (niveau 3)</span></li>
-              <li><i class="dot dot-laser"></i><span><b>Lasers</b> : quitte la zone avant le tir (niveau 4)</span></li>
+              <li><i class="dot dot-shard"></i><span><b>Éclats</b> : à éviter (les gros se divisent, niv. 5)</span></li>
+              <li><i class="dot dot-seeker"></i><span><b>Traqueurs</b> : ils te suivent (niv. 3)</span></li>
+              <li><i class="dot dot-laser"></i><span><b>Lasers</b> : quitte la zone avant le tir (niv. 4)</span></li>
+              <li><i class="dot dot-mine"></i><span><b>Mines</b> : explosent en anneau (niv. 6)</span></li>
+              <li><i class="dot dot-hole"></i><span><b>Trous noirs</b> : ils t'attirent (niv. 8)</span></li>
+              <li><i class="dot dot-boss"></i><span><b>Boss</b> : survis 20 s, tous les 5 niveaux</span></li>
               <li><i class="dot dot-energy"></i><span><b>Énergie</b> : +100 points et dash rechargé</span></li>
-              <li><i class="dot dot-graze"></i><span><b>Frôler</b> un éclat sans le toucher : +25 points</span></li>
               <li><i class="dot dot-power"></i><span><b>Bonus</b> : <span class="c-shield">bouclier</span>, <span class="c-slow">ralenti</span> ou <span class="c-magnet">aimant</span></span></li>
-              <li><i class="dot dot-combo"></i><span><b>Combo</b> : enchaîne frôlements et énergie, jusqu'à x5</span></li>
+              <li><i class="dot dot-combo"></i><span><b>Combo</b> : frôle les éclats et enchaîne, jusqu'à x5</span></li>
             </ul>
           </div>
         </div>
@@ -144,6 +159,7 @@
         <div class="badges">
           <p id="go-record" class="record-badge hidden">Nouveau record !</p>
           <p id="go-unlock" class="unlock-badge hidden"></p>
+          <p id="go-ach" class="ach-badge hidden"></p>
         </div>
 
         <div class="final-score">
@@ -180,6 +196,88 @@
         <div id="ships" class="ships"></div>
         <div class="btn-row">
           <button type="button" id="btn-hangar-back" class="btn">Retour</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Écran des modes ===== -->
+    <section id="screen-modes" class="screen" aria-labelledby="modes-title">
+      <div class="panel panel-small">
+        <h2 id="modes-title" class="screen-title hangar-title">MODES</h2>
+        <div class="modes">
+          <button type="button" id="btn-mode-normal" class="mode-card">
+            <span class="mode-name">Normal</span>
+            <span class="mode-desc">Survis le plus longtemps possible. Un boss tous les 5 niveaux.</span>
+            <span class="mode-best">Record : <b id="mode-best-normal">0</b></span>
+          </button>
+          <button type="button" id="btn-daily" class="mode-card mode-daily">
+            <span class="mode-name">Défi du jour</span>
+            <span class="mode-desc">Les mêmes vagues pour tout le monde aujourd'hui.</span>
+            <span class="mode-best">Record du jour : <b id="mode-best-daily">0</b></span>
+          </button>
+          <button type="button" id="btn-mode-timeattack" class="mode-card mode-timeattack">
+            <span class="mode-name">Contre-la-montre</span>
+            <span class="mode-desc">60 secondes pour faire le meilleur score. Un niveau toutes les 8 s.</span>
+            <span class="mode-best">Record : <b id="mode-best-timeattack">0</b></span>
+          </button>
+          <button type="button" id="btn-mode-zen" class="mode-card mode-zen">
+            <span class="mode-name">Zen</span>
+            <span class="mode-desc">Pas de mort : un coup te coûte ton combo et 100 points. Pour s'entraîner.</span>
+            <span class="mode-best">Sans record ni points</span>
+          </button>
+        </div>
+        <div class="btn-row">
+          <button type="button" id="btn-modes-back" class="btn">Retour</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Écran des succès ===== -->
+    <section id="screen-achievements" class="screen" aria-labelledby="ach-title">
+      <div class="panel panel-small">
+        <h2 id="ach-title" class="screen-title hangar-title">SUCCÈS</h2>
+        <p class="hint"><strong id="ach-count" class="points-value">0/12</strong> débloqués · chaque succès rapporte des points cumulés</p>
+        <div id="achievements" class="achievements"></div>
+        <div class="btn-row">
+          <button type="button" id="btn-ach-back" class="btn">Retour</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Écran des réglages ===== -->
+    <section id="screen-settings" class="screen" aria-labelledby="settings-title">
+      <div class="panel panel-small">
+        <h2 id="settings-title" class="screen-title hangar-title">RÉGLAGES</h2>
+        <div class="settings">
+          <label class="setting">
+            <span class="setting-name">Volume de la musique</span>
+            <input type="range" id="set-music" min="0" max="100" step="5">
+            <output id="set-music-val">60</output>
+          </label>
+          <label class="setting">
+            <span class="setting-name">Volume des effets</span>
+            <input type="range" id="set-sfx" min="0" max="100" step="5">
+            <output id="set-sfx-val">100</output>
+          </label>
+          <div class="setting">
+            <span class="setting-name">Taille du joystick</span>
+            <div class="segmented" id="set-joystick" role="group" aria-label="Taille du joystick">
+              <button type="button" data-size="small">Petit</button>
+              <button type="button" data-size="medium">Moyen</button>
+              <button type="button" data-size="large">Grand</button>
+            </div>
+          </div>
+          <label class="setting setting-check">
+            <span class="setting-name">Réduire les effets <small>(tremblements, flashs, particules)</small></span>
+            <input type="checkbox" id="set-reduce">
+          </label>
+          <div class="setting">
+            <span class="setting-name">Tutoriel</span>
+            <button type="button" id="btn-tuto-again" class="btn btn-small">Revoir le tutoriel</button>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button type="button" id="btn-settings-back" class="btn">Retour</button>
         </div>
       </div>
     </section>
