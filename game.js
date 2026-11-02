@@ -729,27 +729,72 @@
     scale: 1,    // pixels CSS par unité de jeu
     W: CONFIG.WORLD_SHORT_SIDE, // largeur du monde en unités
     H: CONFIG.WORLD_SHORT_SIDE, // hauteur du monde en unités
+    cssW: 0,     // taille de l'écran (pixels CSS) au dernier redimensionnement
+    cssH: 0,
   };
 
   let stars = [];
 
   function resize() {
-    const w = Math.max(1, window.innerWidth);
-    const h = Math.max(1, window.innerHeight);
-    view.dpr = Math.min(window.devicePixelRatio || 1, CONFIG.MAX_PIXEL_RATIO);
-    canvas.width = Math.round(w * view.dpr);
-    canvas.height = Math.round(h * view.dpr);
+    // Taille réelle de la zone de jeu (fiable sur iPhone après une rotation)
+    const w = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth));
+    const h = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight));
+    const dpr = Math.min(window.devicePixelRatio || 1, CONFIG.MAX_PIXEL_RATIO);
+    if (w === view.cssW && h === view.cssH && dpr === view.dpr) return; // rien n'a changé
+
+    const oldW = view.W;
+    const oldH = view.H;
+    const oldRatio = view.cssW ? view.cssW / view.cssH : 0;
+    view.cssW = w;
+    view.cssH = h;
+    view.dpr = dpr;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
     view.scale = Math.min(w, h) / CONFIG.WORLD_SHORT_SIDE;
     view.W = w / view.scale;
     view.H = h / view.scale;
     createStars();
     updateJoystickHome();
 
+    if (oldRatio) {
+      // Tout garde sa place par rapport à l'écran (un objet au milieu reste au milieu)
+      remapWorld(view.W / oldW, view.H / oldH);
+      // Rotation du téléphone en pleine partie : petit temps de préparation ("PRÊT ?")
+      if (Math.abs(w / h - oldRatio) > 0.15) {
+        input.pointer.active = false; // le joystick repart de zéro
+        input.pointer.id = null;
+        if (game.state === 'playing') game.resumeTimer = Math.max(game.resumeTimer, CONFIG.RESUME_DELAY);
+      }
+    }
+
     // Le joueur reste toujours dans l'écran
     const p = game.player;
     if (p) {
       p.x = clamp(p.x, p.r, view.W - p.r);
       p.y = clamp(p.y, p.r, view.H - p.r);
+    }
+  }
+
+  // Replace tous les objets du jeu quand la forme de l'écran change
+  function remapWorld(sx, sy) {
+    if (!Number.isFinite(sx) || !Number.isFinite(sy)) return;
+    const move = function (o) { o.x *= sx; o.y *= sy; };
+    if (game.player) move(game.player);
+    game.hazards.forEach(move);
+    game.energies.forEach(move);
+    game.powerups.forEach(move);
+    game.mines.forEach(move);
+    game.holes.forEach(move);
+    game.beams.forEach(move);
+    game.particles.forEach(move);
+    game.rings.forEach(move);
+    game.texts.forEach(move);
+    for (const l of game.lasers) l.pos *= l.horizontal ? sy : sx;
+    const b = game.boss;
+    if (b.active) {
+      b.x *= sx;
+      b.y *= sy;
+      b.targetY = Math.max(view.H * 0.24, 190);
     }
   }
 
@@ -4113,7 +4158,16 @@
     });
 
     // Taille de l'écran
+    // Taille de l'écran et rotation du téléphone. Sur iPhone, la nouvelle taille
+    // n'est pas toujours connue tout de suite : on vérifie aussi un peu après.
     window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', function () {
+      resize();
+      setTimeout(resize, 150);
+      setTimeout(resize, 500);
+    });
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+    if (window.ResizeObserver) new ResizeObserver(function () { resize(); }).observe(canvas);
     resize();
 
     // Interface de départ
