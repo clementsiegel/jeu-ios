@@ -40,7 +40,9 @@
     PLAYER_SPEED: 400,       // unités par seconde
     PLAYER_ACCEL: 12,        // réactivité des déplacements (plus haut = plus nerveux)
     POINTER_FOLLOW: 5,       // douceur du suivi de la souris / du doigt
-    TOUCH_SENSITIVITY: 1.4,  // sur mobile, le vaisseau bouge 1,4 fois plus que le doigt
+    JOYSTICK_RADIUS: 60,     // rayon du joystick tactile, en pixels à l'écran
+    JOYSTICK_DEADZONE: 0.12, // zone morte au centre du joystick (12 % du rayon)
+    JOYSTICK_KNOB: 0.42,     // taille du bouton du joystick (par rapport au rayon)
     DASH_SPEED: 1150,
     DASH_DURATION: 0.17,     // secondes d'invincibilité pendant le dash
     DASH_COOLDOWN: 1.1,      // secondes avant de pouvoir refaire un dash
@@ -493,6 +495,7 @@
     view.W = w / view.scale;
     view.H = h / view.scale;
     createStars();
+    updateJoystickHome();
 
     // Le joueur reste toujours dans l'écran
     const p = game.player;
@@ -686,10 +689,11 @@
       active: false,
       id: null,
       type: 'mouse',
-      x: 0, y: 0,           // position actuelle (unités de jeu)
-      startX: 0, startY: 0, // position au moment du toucher
-      shipX: 0, shipY: 0,   // position du vaisseau au moment du toucher
+      x: 0, y: 0,             // souris : position visée (unités de jeu)
+      baseX: 0, baseY: 0,     // joystick : centre (pixels à l'écran)
+      fingerX: 0, fingerY: 0, // joystick : position du pouce (pixels à l'écran)
     },
+    joyHome: { x: 0, y: 0 },  // place du joystick "repère" quand on ne touche pas l'écran
   };
 
   const MOVE_KEYS = {
@@ -786,6 +790,12 @@
     };
   }
 
+  // Position du doigt en pixels à l'écran (pour le joystick)
+  function pointerToScreen(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
   function onPointerDown(e) {
     e.preventDefault();
     if (e.pointerType === 'mouse') {
@@ -795,14 +805,24 @@
     const ptr = input.pointer;
     if (ptr.active) { requestDash(); return; } // deuxième doigt = dash
 
-    const pos = pointerToWorld(e);
     ptr.active = true;
     ptr.id = e.pointerId;
     ptr.type = e.pointerType;
-    ptr.x = ptr.startX = pos.x;
-    ptr.y = ptr.startY = pos.y;
-    ptr.shipX = game.player ? game.player.x : pos.x;
-    ptr.shipY = game.player ? game.player.y : pos.y;
+    if (e.pointerType === 'touch') {
+      // Joystick flottant : il apparaît sous le pouce (entièrement visible à l'écran)
+      const s = pointerToScreen(e);
+      const R = CONFIG.JOYSTICK_RADIUS;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      ptr.baseX = clamp(s.x, Math.min(R + 8, w / 2), Math.max(w - R - 8, w / 2));
+      ptr.baseY = clamp(s.y, Math.min(R + 8, h / 2), Math.max(h - R - 8, h / 2));
+      ptr.fingerX = s.x;
+      ptr.fingerY = s.y;
+    } else {
+      const pos = pointerToWorld(e);
+      ptr.x = pos.x;
+      ptr.y = pos.y;
+    }
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* sans importance */ }
   }
 
@@ -818,6 +838,21 @@
       ptr.id = null;
       return;
     }
+    if (ptr.type === 'touch') {
+      const s = pointerToScreen(e);
+      ptr.fingerX = s.x;
+      ptr.fingerY = s.y;
+      // Si le pouce sort du cercle, le joystick le suit : changer de direction reste rapide
+      const R = CONFIG.JOYSTICK_RADIUS;
+      const dx = s.x - ptr.baseX;
+      const dy = s.y - ptr.baseY;
+      const len = Math.hypot(dx, dy);
+      if (len > R) {
+        ptr.baseX = s.x - (dx / len) * R;
+        ptr.baseY = s.y - (dy / len) * R;
+      }
+      return;
+    }
     const pos = pointerToWorld(e);
     ptr.x = pos.x;
     ptr.y = pos.y;
@@ -830,17 +865,29 @@
     }
   }
 
-  // Point vers lequel le vaisseau se dirige quand on joue à la souris ou au doigt
-  function pointerTarget() {
+  // Joystick : direction et force (0 à 1) selon la distance du pouce au centre
+  function joystickVector() {
     const ptr = input.pointer;
-    if (ptr.type === 'touch') {
-      // Au doigt : déplacement relatif, pour que le doigt ne cache pas le vaisseau
-      return {
-        x: clamp(ptr.shipX + (ptr.x - ptr.startX) * CONFIG.TOUCH_SENSITIVITY, 0, view.W),
-        y: clamp(ptr.shipY + (ptr.y - ptr.startY) * CONFIG.TOUCH_SENSITIVITY, 0, view.H),
-      };
-    }
-    return { x: ptr.x, y: ptr.y };
+    const R = CONFIG.JOYSTICK_RADIUS;
+    const dx = ptr.fingerX - ptr.baseX;
+    const dy = ptr.fingerY - ptr.baseY;
+    const len = Math.hypot(dx, dy);
+    const dead = R * CONFIG.JOYSTICK_DEADZONE;
+    if (len <= dead) return { x: 0, y: 0 };
+    const force = Math.min(1, (len - dead) / (R - dead));
+    return { x: (dx / len) * force, y: (dy / len) * force };
+  }
+
+  // Place du joystick "repère" : en bas à gauche, aligné sur le bas du bouton DASH
+  // (qui tient déjà compte de la barre du bas des iPhone)
+  function updateJoystickHome() {
+    const R = CONFIG.JOYSTICK_RADIUS;
+    const h = canvas.clientHeight || window.innerHeight;
+    let y = h - R - 24;
+    const dash = ui.btnDash.getBoundingClientRect();
+    if (dash.height > 0) y = dash.bottom - canvas.getBoundingClientRect().top - R;
+    input.joyHome.x = R + 28;
+    input.joyHome.y = clamp(y, R + 8, Math.max(R + 8, h - R - 8));
   }
 
   /* ====================================================================
@@ -922,6 +969,7 @@
     ui.powerups.classList.toggle('hidden', s === 'menu');
     ui.btnPause.classList.toggle('hidden', s !== 'playing');
     ui.btnDash.classList.toggle('hidden', !(s === 'playing' && input.touchMode));
+    updateJoystickHome();
   }
 
   function refreshSoundButton() {
@@ -1296,10 +1344,15 @@
       const len = Math.hypot(dx, dy); // même vitesse en diagonale
       targetVx = (dx / len) * CONFIG.PLAYER_SPEED;
       targetVy = (dy / len) * CONFIG.PLAYER_SPEED;
+    } else if (input.pointer.active && input.pointer.type === 'touch') {
+      // Joystick tactile : plus on pousse loin, plus on va vite
+      const j = joystickVector();
+      targetVx = j.x * CONFIG.PLAYER_SPEED;
+      targetVy = j.y * CONFIG.PLAYER_SPEED;
     } else if (input.pointer.active) {
-      const t = pointerTarget();
-      const ox = t.x - p.x;
-      const oy = t.y - p.y;
+      // Souris : le vaisseau file vers le pointeur
+      const ox = input.pointer.x - p.x;
+      const oy = input.pointer.y - p.y;
       const d = Math.hypot(ox, oy);
       if (d > 1) {
         const speed = Math.min(CONFIG.PLAYER_SPEED, d * CONFIG.POINTER_FOLLOW);
@@ -2076,6 +2129,58 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.globalAlpha = 1;
     }
+
+    drawJoystick();
+  }
+
+  // Joystick tactile, dessiné en pixels d'écran par-dessus le jeu
+  function drawJoystick() {
+    if (game.state !== 'playing' || !input.touchMode) return;
+    const ptr = input.pointer;
+    const R = CONFIG.JOYSTICK_RADIUS;
+    const color = shipColor();
+    let bx;
+    let by;
+    let kx;
+    let ky;
+    let alpha;
+    if (ptr.active && ptr.type === 'touch') {
+      bx = ptr.baseX;
+      by = ptr.baseY;
+      const dx = ptr.fingerX - bx;
+      const dy = ptr.fingerY - by;
+      const len = Math.hypot(dx, dy);
+      const k = len > R ? R / len : 1;
+      kx = bx + dx * k;
+      ky = by + dy * k;
+      alpha = 1;
+    } else {
+      // Repère discret : montre où poser le pouce
+      bx = kx = input.joyHome.x;
+      by = ky = input.joyHome.y;
+      alpha = 0.35;
+    }
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    // Socle
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(12, 6, 34, 0.45)';
+    ctx.beginPath();
+    ctx.arc(bx, by, R, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Bouton
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14 * view.dpr;
+    ctx.beginPath();
+    ctx.arc(kx, ky, R * CONFIG.JOYSTICK_KNOB, 0, TAU);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
   }
 
   function drawGrid() {

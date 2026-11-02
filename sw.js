@@ -11,7 +11,7 @@
    avec internet, puis utilisée au lancement suivant.
    ====================================================================== */
 
-const VERSION = 'eclats-neon-v3';
+const VERSION = 'eclats-neon-v4';
 
 // Tous les fichiers nécessaires pour jouer
 const FILES = [
