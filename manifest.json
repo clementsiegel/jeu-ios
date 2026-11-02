@@ -1,0 +1,17 @@
+{
+  "name": "Éclats Néon",
+  "short_name": "Éclats Néon",
+  "description": "Esquive les éclats, attrape l'énergie et bats ton record. Jouable hors ligne.",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#05010f",
+  "theme_color": "#05010f",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

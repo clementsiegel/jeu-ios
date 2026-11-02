@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#05010f">
+  <meta name="description" content="Éclats Néon : esquive les éclats, attrape l'énergie et bats ton record.">
+
+  <!-- Installation sur l'écran d'accueil (iPhone, iPad, Android) -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Éclats Néon">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <!-- Le fichier manifest.json est ajouté par game.js seulement quand le jeu
+       est en ligne (sinon le navigateur affiche une erreur en double-clic). -->
+
+  <title>Éclats Néon</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Zone de dessin du jeu -->
+    <canvas id="game" aria-label="Zone de jeu Éclats Néon"></canvas>
+
+    <!-- Informations pendant la partie -->
+    <div id="hud" class="hidden">
+      <div class="hud-item">
+        <span class="hud-label">Score</span>
+        <span class="hud-value" id="hud-score">0</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">Record</span>
+        <span class="hud-value hud-best" id="hud-best">0</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">Niveau</span>
+        <span class="hud-value hud-level" id="hud-level">1</span>
+      </div>
+    </div>
+
+    <!-- Bonus actifs : nom + temps restant (rempli par game.js) -->
+    <div id="powerups" class="hidden" aria-label="Bonus actifs"></div>
+
+    <!-- Boutons en haut à droite : pause et son -->
+    <div id="top-buttons">
+      <button type="button" id="btn-pause" class="icon-btn hidden" aria-label="Mettre en pause" title="Pause (Échap ou P)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+      </button>
+      <button type="button" id="btn-sound" class="icon-btn" aria-label="Couper le son" title="Son (M)"></button>
+    </div>
+
+    <!-- Bouton DASH, visible seulement sur écran tactile -->
+    <button type="button" id="btn-dash" class="hidden" aria-label="Dash">DASH</button>
+
+    <!-- ===== Écran d'accueil ===== -->
+    <section id="screen-menu" class="screen" aria-labelledby="menu-title">
+      <div class="panel">
+        <h1 id="menu-title" class="title">ÉCLATS <span>NÉON</span></h1>
+        <p class="tagline">Esquive les éclats, attrape l'énergie et survis le plus longtemps possible.</p>
+
+        <button type="button" id="btn-play" class="btn btn-primary">Jouer</button>
+        <p class="best-line">Record : <strong id="menu-best">0</strong></p>
+
+        <div class="cards">
+          <div class="card">
+            <h2>Commandes</h2>
+            <div class="ctrl-row">
+              <span class="keys"><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> ou <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>
+              <span class="action">Se déplacer</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="keys">Maintenir le clic gauche ou glisser le doigt</span>
+              <span class="action">Se déplacer à la souris / au doigt</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="keys"><kbd>Espace</kbd> ou <kbd>Maj</kbd> · clic droit · bouton DASH</span>
+              <span class="action">Dash : invincible un court instant</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="keys"><kbd>Échap</kbd> ou <kbd>P</kbd></span>
+              <span class="action">Pause</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="keys"><kbd>M</kbd></span>
+              <span class="action">Couper / remettre le son</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>À savoir</h2>
+            <ul class="legend">
+              <li><i class="dot dot-player"></i><span><b>Toi</b> : le vaisseau cyan</span></li>
+              <li><i class="dot dot-shard"></i><span><b>Éclats</b> : ne les touche pas</span></li>
+              <li><i class="dot dot-seeker"></i><span><b>Traqueurs</b> : ils te suivent (niveau 3)</span></li>
+              <li><i class="dot dot-laser"></i><span><b>Lasers</b> : quitte la zone avant le tir (niveau 4)</span></li>
+              <li><i class="dot dot-energy"></i><span><b>Énergie</b> : +100 points et dash rechargé</span></li>
+              <li><i class="dot dot-graze"></i><span><b>Frôler</b> un éclat sans le toucher : +25 points</span></li>
+              <li><i class="dot dot-power"></i><span><b>Bonus</b> : <span class="c-shield">bouclier</span>, <span class="c-slow">ralenti</span> ou <span class="c-magnet">aimant</span></span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Écran de pause ===== -->
+    <section id="screen-pause" class="screen" aria-labelledby="pause-title">
+      <div class="panel panel-small">
+        <h2 id="pause-title" class="screen-title pause-title">PAUSE</h2>
+        <p class="hint">Appuie sur <kbd>Échap</kbd> ou <kbd>P</kbd> pour reprendre.</p>
+        <div class="btn-row">
+          <button type="button" id="btn-resume" class="btn btn-primary">Reprendre</button>
+          <button type="button" id="btn-quit" class="btn">Menu principal</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Écran de fin de partie ===== -->
+    <section id="screen-gameover" class="screen" aria-labelledby="go-title">
+      <div class="panel panel-small">
+        <h2 id="go-title" class="screen-title gameover-title">PARTIE TERMINÉE</h2>
+        <p id="go-record" class="record-badge hidden">Nouveau record !</p>
+
+        <div class="final-score">
+          <span class="final-label">Score</span>
+          <span id="go-score" class="final-value">0</span>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><span id="go-best">0</span><small>Record</small></div>
+          <div class="stat"><span id="go-time">0:00</span><small>Temps</small></div>
+          <div class="stat"><span id="go-level">1</span><small>Niveau</small></div>
+          <div class="stat"><span id="go-energy">0</span><small>Énergie</small></div>
+          <div class="stat"><span id="go-graze">0</span><small>Frôlements</small></div>
+          <div class="stat"><span id="go-powerups">0</span><small>Bonus</small></div>
+        </div>
+
+        <div class="btn-row">
+          <button type="button" id="btn-replay" class="btn btn-primary">Rejouer</button>
+          <button type="button" id="btn-menu" class="btn">Menu principal</button>
+        </div>
+        <p class="hint">Appuie sur <kbd>Entrée</kbd> pour rejouer.</p>
+      </div>
+    </section>
+
+    <noscript>
+      <p class="noscript">Ce jeu a besoin de JavaScript. Active-le dans ton navigateur pour jouer.</p>
+    </noscript>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
