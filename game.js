@@ -122,6 +122,11 @@
     NEAR_MISS_POINTS: 25,
     NEAR_MISS_MARGIN: 22,
 
+    // --- Combo ---
+    COMBO_WINDOW: 4,         // secondes pour enchaîner l'action suivante (frôlement, énergie, bonus)
+    COMBO_STEP: 3,           // actions enchaînées pour gagner +1 au multiplicateur
+    COMBO_MAX: 5,            // multiplicateur maximum (x5)
+
     // --- Rythme et effets ---
     MAX_STEP: 1 / 120,       // pas de simulation maximal (évite qu'un objet en traverse un autre)
     MAX_FRAME_TIME: 0.1,     // évite un bond énorme après un ralentissement
@@ -139,6 +144,9 @@
     // --- Sauvegarde ---
     STORAGE_KEY_BEST: 'eclatsNeon.record',
     STORAGE_KEY_MUTE: 'eclatsNeon.sonCoupe',
+    STORAGE_KEY_DAILY: 'eclatsNeon.defi',      // record du défi du jour (avec sa date)
+    STORAGE_KEY_POINTS: 'eclatsNeon.points',   // points cumulés : débloquent les vaisseaux
+    STORAGE_KEY_SHIP: 'eclatsNeon.vaisseau',   // vaisseau choisi
   };
 
   const COLORS = {
@@ -158,6 +166,7 @@
     magnet: '#5c8dff',
     laser: '#ff2d6f',
     laserCore: '#fff0f6',
+    combo: '#f4f0ff',
     text: '#e8f7ff',
     white: '#ffffff',
   };
@@ -178,12 +187,34 @@
     return CONFIG[POWERUPS[type].durationKey];
   }
 
+  // Vaisseaux à débloquer avec les points cumulés. Purement visuel : la zone
+  // de collision est la même pour tous, le jeu reste équitable.
+  // (Pas de rose, d'orange ni de rouge : ce sont les couleurs des dangers.)
+  const SHIPS = [
+    { id: 'fleche',    name: 'Flèche',    color: '#3ef2ff', cost: 0 },
+    { id: 'libellule', name: 'Libellule', color: '#b6ff4a', cost: 1000 },
+    { id: 'comete',    name: 'Comète',    color: '#ffd447', cost: 3000 },
+    { id: 'delta',     name: 'Delta',     color: '#b388ff', cost: 6000 },
+    { id: 'etoile',    name: 'Étoile',    color: '#f4f7ff', cost: 10000 },
+    { id: 'prisme',    name: 'Prisme',    color: '#ffffff', cost: 20000, rainbow: true },
+  ];
+
+  // Formes des vaisseaux (pointe vers la droite), en multiples du rayon
+  const SHIP_SHAPES = {
+    fleche:    [1.35, 0, -0.9, -0.85, -0.45, 0, -0.9, 0.85],
+    libellule: [1.6, 0, 0.2, -0.28, -0.35, -1.05, -0.55, -0.25, -1.0, 0, -0.55, 0.25, -0.35, 1.05, 0.2, 0.28],
+    delta:     [1.25, 0, -0.8, -1.15, -0.5, -0.35, -0.75, 0, -0.5, 0.35, -0.8, 1.15],
+    etoile:    [1.5, 0, 0.3, -0.3, 0, -1.1, -0.3, -0.3, -1.1, 0, -0.3, 0.3, 0, 1.1, 0.3, 0.3],
+    prisme:    [1.4, 0, 0.1, -0.85, -1.0, 0, 0.1, 0.85],
+  };
+
   /* ====================================================================
      2. OUTILS
      ==================================================================== */
 
+  // Hasard pour les effets visuels seulement (particules, étoiles, tremblement).
+  // Les apparitions utilisent les suites "rejouables" plus bas (défi du jour).
   function rand(min, max) { return min + Math.random() * (max - min); }
-  function randInt(min, max) { return Math.floor(rand(min, max + 1)); }
   function clamp(v, min, max) { return v < min ? min : (v > max ? max : v); }
   function angleDiff(from, to) { return Math.atan2(Math.sin(to - from), Math.cos(to - from)); }
   function $(id) { return document.getElementById(id); }
@@ -204,6 +235,63 @@
     const m = Math.floor(total / 60);
     const s = total % 60;
     return m + ':' + String(s).padStart(2, '0');
+  }
+
+  // Date du jour en heure locale, ex. "2026-11-02" (sert de graine au défi du jour)
+  function todayKey() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function formatToday() {
+    return new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+  }
+
+  // --- Hasard "rejouable" ---
+  // Avec la même graine, mulberry32 donne toujours la même suite de nombres.
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Transforme un texte en nombre (graine)
+  function hashString(text) {
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  // Petits outils autour d'un générateur de hasard
+  function makeRng(next) {
+    return {
+      next: next,
+      range: function (min, max) { return min + next() * (max - min); },
+      int: function (min, max) { return Math.floor(min + next() * (max - min + 1)); },
+      chance: function (p) { return next() < p; },
+    };
+  }
+
+  // Une suite de hasard séparée par type d'apparition. Chaque apparition tire
+  // UNE valeur dans sa suite puis utilise son propre générateur : ainsi le
+  // défi du jour reste identique pour tous, quoi que fasse le joueur.
+  const SPAWN_STREAMS = ['hazard', 'energy', 'powerup', 'laser'];
+  const streams = {};
+
+  function seedStreams(seedText) {
+    for (const name of SPAWN_STREAMS) streams[name] = mulberry32(hashString(seedText + ':' + name));
+  }
+
+  function spawnRng(name) {
+    return makeRng(mulberry32(Math.floor(streams[name]() * 4294967296)));
   }
 
   /* ====================================================================
@@ -230,9 +318,28 @@
     },
   };
 
-  function loadBest() {
-    const value = parseInt(storage.get(CONFIG.STORAGE_KEY_BEST, '0'), 10);
+  function loadInt(key) {
+    const value = parseInt(storage.get(key, '0'), 10);
     return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  function loadBest() {
+    return loadInt(CONFIG.STORAGE_KEY_BEST);
+  }
+
+  // Record du défi du jour, enregistré avec sa date : { date: "2026-11-02", best: 1234 }
+  function loadDailyBest(dateKey) {
+    try {
+      const data = JSON.parse(storage.get(CONFIG.STORAGE_KEY_DAILY, 'null'));
+      if (data && data.date === dateKey && Number.isFinite(data.best)) return Math.max(0, Math.floor(data.best));
+    } catch (e) {
+      /* donnée abîmée : on repart de zéro */
+    }
+    return 0;
+  }
+
+  function saveDailyBest(dateKey, best) {
+    storage.set(CONFIG.STORAGE_KEY_DAILY, JSON.stringify({ date: dateKey, best: best }));
   }
 
   /* ====================================================================
@@ -351,6 +458,10 @@
     shieldHit() { this.noise(0.35, 0.3, 5000, 400); this.tone(900, 0.3, 'triangle', 0.15, 200); },
     slowStart() { this.tone(500, 0.6, 'sawtooth', 0.06, 110); },
     powerEnd()  { this.tone(700, 0.08, 'square', 0.06); this.tone(470, 0.12, 'square', 0.06, 0, 0.08); },
+    comboUp(m)  { this.tone(500 + m * 140, 0.1, 'square', 0.07); this.tone(750 + m * 190, 0.16, 'square', 0.07, 0, 0.06); },
+    comboLost() { this.tone(420, 0.2, 'triangle', 0.1, 170); },
+    newShip()   { [523, 784, 1047, 1568].forEach((f, i) => this.tone(f, 0.2, 'sine', 0.14, 0, 0.5 + i * 0.1)); },
+    denied()    { this.tone(190, 0.14, 'square', 0.07, 140); },
   };
 
   /* ====================================================================
@@ -457,11 +568,43 @@
     flash: 0,
     bgTime: 0,
 
-    stats: { energy: 0, grazes: 0, powerups: 0 },
+    stats: { energy: 0, grazes: 0, powerups: 0, bestCombo: 1 },
     newRecord: false,
     finalScore: 0,
     shownScore: 0,
+
+    // Défi du jour
+    mode: 'normal',  // 'normal' ou 'daily' (défi du jour)
+    dailyKey: '',
+    dailyBest: 0,
+    newDailyRecord: false,
+
+    // Combo : actions enchaînées, multiplicateur actuel, temps restant pour enchaîner
+    combo: { chain: 0, mult: 1, timer: 0 },
+
+    // Vaisseaux
+    points: loadInt(CONFIG.STORAGE_KEY_POINTS), // points cumulés de toutes les parties
+    shipId: 'fleche',
   };
+
+  function currentShip() {
+    for (const ship of SHIPS) if (ship.id === game.shipId) return ship;
+    return SHIPS[0];
+  }
+
+  // Couleur du vaisseau (le Prisme change de couleur en continu)
+  function shipColor() {
+    const ship = currentShip();
+    if (!ship.rainbow) return ship.color;
+    return 'hsl(' + Math.floor((game.bgTime * 90) % 360) + ', 100%, 65%)';
+  }
+
+  // Vaisseau choisi la dernière fois, s'il est bien débloqué
+  function loadShipId() {
+    const id = storage.get(CONFIG.STORAGE_KEY_SHIP, 'fleche');
+    for (const ship of SHIPS) if (ship.id === id && ship.cost <= game.points) return id;
+    return 'fleche';
+  }
 
   function createPlayer() {
     return {
@@ -492,7 +635,17 @@
   }
 
   // Remet ABSOLUMENT TOUT à zéro pour une nouvelle partie
-  function resetGame() {
+  function resetGame(mode) {
+    game.mode = mode === 'daily' ? 'daily' : 'normal';
+    game.dailyKey = todayKey();
+    game.dailyBest = loadDailyBest(game.dailyKey);
+    game.newDailyRecord = false;
+    // Défi du jour : la même graine pour tout le monde ce jour-là.
+    // Partie normale : une graine différente à chaque fois.
+    seedStreams(game.mode === 'daily'
+      ? 'defi-' + game.dailyKey
+      : 'partie-' + Math.random() + '-' + Date.now());
+
     clearWorld();
     game.player = createPlayer();
     game.time = 0;
@@ -500,7 +653,9 @@
     game.level = 1;
     game.spawnTimer = CONFIG.FIRST_SPAWN_DELAY;
     game.energyTimer = CONFIG.FIRST_ENERGY_DELAY;
-    game.laserTimer = rand(CONFIG.LASER_MIN_INTERVAL, CONFIG.LASER_MAX_INTERVAL);
+    game.laserTimer = spawnRng('laser').range(CONFIG.LASER_MIN_INTERVAL, CONFIG.LASER_MAX_INTERVAL);
+    resetCombo();
+    game.stats.bestCombo = 1;
     game.powerupTimer = CONFIG.POWERUP_FIRST_DELAY;
     clearPowerupEffects();
     game.ambientTimer = 0;
@@ -588,6 +743,10 @@
     switch (code) {
       case 'Escape':
       case 'KeyP':
+        if (ui.current === 'hangar') {
+          if (code === 'Escape') closeHangar();
+          break;
+        }
         togglePause();
         break;
       case 'Space':
@@ -599,10 +758,10 @@
       case 'NumpadEnter':
         e.preventDefault();
         if (game.state === 'menu') {
-          startGame();
+          if (ui.current === 'menu') startGame('normal');
         } else if (game.state === 'gameover' &&
                    performance.now() - game.stateChangedAt > CONFIG.GAMEOVER_INPUT_DELAY) {
-          startGame();
+          startGame(game.mode); // rejoue le même mode (défi du jour compris)
         } else if (game.state === 'paused') {
           resumeGame();
         }
@@ -705,11 +864,28 @@
     goGraze: $('go-graze'),
     goPowerups: $('go-powerups'),
     goRecord: $('go-record'),
+    goMode: $('go-mode'),
+    goBestLabel: $('go-best-label'),
+    goCombo: $('go-combo'),
+    goPoints: $('go-points'),
+    goUnlock: $('go-unlock'),
+    goProgress: $('go-progress'),
+    btnReplay: $('btn-replay'),
     powerups: $('powerups'),
+    bestLabel: $('hud-best-label'),
+    combo: $('combo'),
+    comboMult: $('combo-mult'),
+    comboSteps: $('combo-steps'),
+    comboBar: $('combo-bar'),
+    menuDaily: $('menu-daily'),
+    hangarPoints: $('hangar-points'),
+    ships: $('ships'),
+    current: 'menu', // écran actuellement affiché
     screens: {
       menu: $('screen-menu'),
       pause: $('screen-pause'),
       gameover: $('screen-gameover'),
+      hangar: $('screen-hangar'),
     },
   };
 
@@ -723,6 +899,7 @@
 
   // Affiche un seul écran (ou aucun si name vaut null)
   function showScreen(name) {
+    ui.current = name;
     for (const key in ui.screens) {
       const visible = key === name;
       ui.screens[key].classList.toggle('visible', visible);
@@ -761,12 +938,16 @@
   }
 
   // Le HUD n'est modifié que si une valeur change (évite du travail inutile)
-  const hudCache = { score: null, best: null, level: null, dashReady: null };
+  const hudCache = {
+    score: null, best: null, level: null, dashReady: null,
+    comboVisible: null, comboMult: null, comboSteps: null, comboRatio: null,
+  };
 
   function refreshHud() {
     if (game.state === 'menu') return;
     const score = Math.floor(game.score);
-    const best = Math.max(game.best, score);
+    // En défi du jour, on compare au record du jour
+    const best = Math.max(game.mode === 'daily' ? game.dailyBest : game.best, score);
     if (score !== hudCache.score) { ui.score.textContent = formatScore(score); hudCache.score = score; }
     if (best !== hudCache.best) { ui.best.textContent = formatScore(best); hudCache.best = best; }
     if (game.level !== hudCache.level) { ui.level.textContent = String(game.level); hudCache.level = game.level; }
@@ -774,6 +955,33 @@
     if (dashReady !== hudCache.dashReady) {
       ui.btnDash.classList.toggle('cooldown', !dashReady);
       hudCache.dashReady = dashReady;
+    }
+
+    // Combo : multiplicateur, progression vers le suivant et temps restant
+    const c = game.combo;
+    const comboVisible = c.chain > 0;
+    if (comboVisible !== hudCache.comboVisible) {
+      ui.combo.classList.toggle('hidden', !comboVisible);
+      hudCache.comboVisible = comboVisible;
+    }
+    if (comboVisible) {
+      if (c.mult !== hudCache.comboMult) {
+        ui.comboMult.textContent = 'x' + c.mult;
+        ui.combo.classList.toggle('hot', c.mult >= 3);
+        hudCache.comboMult = c.mult;
+      }
+      const steps = c.mult >= CONFIG.COMBO_MAX ? -1 : c.chain % CONFIG.COMBO_STEP;
+      if (steps !== hudCache.comboSteps) {
+        ui.comboSteps.textContent = steps < 0
+          ? 'MAX'
+          : '●'.repeat(steps) + '○'.repeat(CONFIG.COMBO_STEP - steps);
+        hudCache.comboSteps = steps;
+      }
+      const ratio = Math.round((c.timer / CONFIG.COMBO_WINDOW) * 100) / 100;
+      if (ratio !== hudCache.comboRatio) {
+        ui.comboBar.style.transform = 'scaleX(' + clamp(ratio, 0, 1) + ')';
+        hudCache.comboRatio = ratio;
+      }
     }
 
     // Jauges des bonus actifs
@@ -822,16 +1030,117 @@
     }
   }
 
+  // Textes qui changent selon le mode (partie normale ou défi du jour)
+  function refreshModeLabels() {
+    const daily = game.mode === 'daily';
+    ui.bestLabel.textContent = daily ? 'Défi du jour' : 'Record';
+    ui.btnReplay.textContent = daily ? 'Rejouer le défi' : 'Rejouer';
+    hudCache.best = null; // force la mise à jour du chiffre
+  }
+
+  function refreshMenu() {
+    ui.menuBest.textContent = formatScore(game.best);
+    ui.menuDaily.textContent = formatScore(loadDailyBest(todayKey()));
+  }
+
+  // --- Écran "Vaisseaux" ---
+
+  function openHangar() {
+    if (game.state !== 'menu') return;
+    buildHangar();
+    showScreen('hangar');
+    Sound.click();
+  }
+
+  function closeHangar() {
+    if (ui.current !== 'hangar') return;
+    refreshMenu();
+    showScreen('menu');
+    Sound.click();
+  }
+
+  function nextShip() {
+    for (const ship of SHIPS) if (ship.cost > game.points) return ship;
+    return null;
+  }
+
+  function buildHangar() {
+    ui.hangarPoints.textContent = formatScore(game.points);
+    ui.ships.textContent = '';
+    for (const ship of SHIPS) {
+      const unlocked = game.points >= ship.cost;
+      const selected = ship.id === game.shipId;
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'ship-tile' + (selected ? ' selected' : '') + (unlocked ? '' : ' locked');
+      tile.style.setProperty('--ship-color', ship.rainbow ? '#ffffff' : ship.color);
+      tile.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      tile.setAttribute('aria-label', ship.name + (unlocked
+        ? (selected ? ', choisi' : ', disponible')
+        : ', bloqué, ' + formatScore(ship.cost) + ' points'));
+
+      const preview = document.createElement('canvas');
+      preview.className = 'ship-preview';
+      drawShipPreview(preview, ship, unlocked);
+      const name = document.createElement('span');
+      name.className = 'ship-name';
+      name.textContent = ship.name;
+      const status = document.createElement('span');
+      status.className = 'ship-status';
+      status.textContent = selected ? 'Choisi' : (unlocked ? 'Choisir' : '🔒 ' + formatScore(ship.cost) + ' pts');
+      tile.appendChild(preview);
+      tile.appendChild(name);
+      tile.appendChild(status);
+
+      if (!unlocked) {
+        const track = document.createElement('span');
+        track.className = 'ship-progress';
+        const bar = document.createElement('i');
+        bar.style.transform = 'scaleX(' + clamp(game.points / ship.cost, 0, 1) + ')';
+        track.appendChild(bar);
+        tile.appendChild(track);
+      }
+
+      tile.addEventListener('click', function () { selectShip(ship, tile); });
+      ui.ships.appendChild(tile);
+    }
+  }
+
+  function selectShip(ship, tile) {
+    Sound.unlock();
+    if (game.points < ship.cost) {
+      // Bloqué : le vaisseau tremble
+      tile.classList.remove('shake');
+      void tile.offsetWidth; // relance l'animation
+      tile.classList.add('shake');
+      Sound.denied();
+      return;
+    }
+    game.shipId = ship.id;
+    storage.set(CONFIG.STORAGE_KEY_SHIP, ship.id);
+    Sound.click();
+    buildHangar();
+  }
+
+  // Ajoute un score aux points cumulés et renvoie les vaisseaux débloqués grâce à lui
+  function addPoints(score) {
+    const before = game.points;
+    game.points = before + Math.max(0, Math.floor(score));
+    storage.set(CONFIG.STORAGE_KEY_POINTS, game.points);
+    return SHIPS.filter(function (s) { return s.cost > before && s.cost <= game.points; });
+  }
+
   /* ====================================================================
      9. DÉROULEMENT D'UNE PARTIE
      Chaque fonction vérifie l'état actuel : un double clic ou une touche
      appuyée deux fois ne peut jamais lancer deux parties en même temps.
      ==================================================================== */
 
-  function startGame() {
+  function startGame(mode) {
     if (game.state !== 'menu' && game.state !== 'gameover') return;
     Sound.unlock();
-    resetGame();
+    resetGame(mode);
+    refreshModeLabels();
     showScreen(null);
     setState('playing');
     Sound.start();
@@ -866,13 +1175,29 @@
     return false;
   }
 
+  function saveDailyIfNeeded(score) {
+    if (game.mode === 'daily' && score > game.dailyBest) {
+      game.dailyBest = score;
+      saveDailyBest(game.dailyKey, score);
+      return true;
+    }
+    return false;
+  }
+
   function goToMenu() {
     if (game.state !== 'paused' && game.state !== 'gameover') return;
-    if (game.state === 'paused') saveBestIfNeeded(Math.floor(game.score));
+    if (game.state === 'paused') {
+      // Partie quittée en cours : son score compte quand même
+      const score = Math.floor(game.score);
+      saveBestIfNeeded(score);
+      saveDailyIfNeeded(score);
+      addPoints(score);
+    }
     clearWorld();
     game.player = null;
     game.ambientTimer = 0;
-    ui.menuBest.textContent = formatScore(game.best);
+    resetCombo();
+    refreshMenu();
     showScreen('menu');
     setState('menu');
   }
@@ -881,6 +1206,7 @@
     const p = game.player;
     p.alive = false;
     clearPowerupEffects(); // les bonus s'arrêtent à la mort
+    resetCombo();
     explode(p.x, p.y);
     game.shake = REDUCED_MOTION ? 5 : 18;
     game.flash = REDUCED_MOTION ? 0.35 : 0.9;
@@ -895,21 +1221,42 @@
     game.finalScore = finalScore;
     game.shownScore = 0;
     game.newRecord = saveBestIfNeeded(finalScore);
+    game.newDailyRecord = saveDailyIfNeeded(finalScore);
+    const unlocked = addPoints(finalScore);
+    const daily = game.mode === 'daily';
 
     ui.goScore.textContent = '0';
-    ui.goBest.textContent = formatScore(game.best);
+    ui.goMode.classList.toggle('hidden', !daily);
+    ui.goMode.textContent = 'Défi du jour · ' + formatToday();
+    ui.goBestLabel.textContent = daily ? 'Record du jour' : 'Record';
+    ui.goBest.textContent = formatScore(daily ? game.dailyBest : game.best);
     ui.goTime.textContent = formatTime(game.time);
     ui.goLevel.textContent = String(game.level);
+    ui.goCombo.textContent = 'x' + game.stats.bestCombo;
     ui.goEnergy.textContent = String(game.stats.energy);
     ui.goGraze.textContent = String(game.stats.grazes);
     ui.goPowerups.textContent = String(game.stats.powerups);
-    ui.goRecord.classList.toggle('hidden', !game.newRecord);
-    ui.menuBest.textContent = formatScore(game.best);
+    ui.goPoints.textContent = formatScore(game.points);
+
+    // Badges : record battu, vaisseau débloqué
+    const recordText = game.newRecord ? 'Nouveau record !' : (game.newDailyRecord ? 'Nouveau record du jour !' : '');
+    ui.goRecord.textContent = recordText;
+    ui.goRecord.classList.toggle('hidden', !recordText);
+    ui.goUnlock.textContent = unlocked.length
+      ? 'Nouveau vaisseau : ' + unlocked.map(function (s) { return s.name; }).join(', ') + ' !'
+      : '';
+    ui.goUnlock.classList.toggle('hidden', unlocked.length === 0);
+    const next = nextShip();
+    ui.goProgress.textContent = next
+      ? 'Prochain vaisseau : ' + next.name + ' à ' + formatScore(next.cost) + ' points cumulés'
+      : 'Tous les vaisseaux sont débloqués !';
+    refreshMenu();
 
     showScreen('gameover');
     setState('gameover');
-    if (game.newRecord) Sound.record();
+    if (game.newRecord || game.newDailyRecord) Sound.record();
     else Sound.gameOver();
+    if (unlocked.length) Sound.newShip();
   }
 
   /* ====================================================================
@@ -1009,7 +1356,7 @@
         Math.sin(back) * 60 + rand(-25, 25),
         dashing ? 0.35 : 0.28,
         dashing ? 5 : 3.5,
-        dashing ? COLORS.white : COLORS.player,
+        dashing ? COLORS.white : shipColor(),
         2
       );
     }
@@ -1026,26 +1373,48 @@
     p.dashTime = CONFIG.DASH_DURATION;
     p.dashCooldown = CONFIG.DASH_COOLDOWN;
     p.angle = Math.atan2(p.dashDirY, p.dashDirX);
-    addRing(p.x, p.y, 8, 55, 0.3, COLORS.player, 3);
+    addRing(p.x, p.y, 8, 55, 0.3, shipColor(), 3);
     Sound.dash();
   }
 
   // --- Éclats et traqueurs ---
 
-  function spawnHazard(type, speedMult) {
+  function spawnHazard(type, speedMult, rng) {
     const W = view.W;
     const H = view.H;
     const p = game.player && game.player.alive ? game.player : null;
     const isSeeker = type === 'seeker';
-    const r = isSeeker ? CONFIG.SEEKER_RADIUS : rand(CONFIG.SHARD_MIN_RADIUS, CONFIG.SHARD_MAX_RADIUS);
-    const out = CONFIG.SPAWN_OFFSCREEN + r;
 
-    // Point de départ sur le pourtour de l'écran, jamais trop près du joueur
+    // 1. Tous les tirages au hasard d'abord, toujours dans le même ordre
+    //    (c'est ce qui rend le défi du jour identique pour tout le monde)
+    const r = isSeeker ? CONFIG.SEEKER_RADIUS : rng.range(CONFIG.SHARD_MIN_RADIUS, CONFIG.SHARD_MAX_RADIUS);
+    const aimAtPlayer = rng.chance(CONFIG.AIM_AT_PLAYER_CHANCE);
+    const spreadX = rng.range(-CONFIG.AIM_SPREAD, CONFIG.AIM_SPREAD);
+    const spreadY = rng.range(-CONFIG.AIM_SPREAD, CONFIG.AIM_SPREAD);
+    const freeX = rng.range(0.1, 0.9);
+    const freeY = rng.range(0.1, 0.9);
+    const baseSpeed = isSeeker ? CONFIG.SEEKER_SPEED : rng.range(CONFIG.SHARD_MIN_SPEED, CONFIG.SHARD_MAX_SPEED);
+    const rot = rng.range(0, TAU);
+    const spin = rng.range(-3, 3);
+    let points = null;
+    if (!isSeeker) {
+      // Forme irrégulière de l'éclat (5 à 8 sommets)
+      const n = rng.int(5, 8);
+      points = [];
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * TAU + rng.range(-0.2, 0.2);
+        const rr = r * rng.range(0.88, 1);
+        points.push(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+    }
+
+    // 2. Point de départ sur le pourtour de l'écran, jamais trop près du joueur
+    const out = CONFIG.SPAWN_OFFSCREEN + r;
     let x = 0;
     let y = 0;
     let ok = false;
     for (let i = 0; i < 12 && !ok; i++) {
-      const t = Math.random() * (2 * W + 2 * H);
+      const t = rng.next() * (2 * W + 2 * H);
       if (t < W) { x = t; y = -out; }
       else if (t < W + H) { x = W + out; y = t - W; }
       else if (t < 2 * W + H) { x = t - W - H; y = H + out; }
@@ -1054,20 +1423,18 @@
     }
     if (!ok) return;
 
-    // Direction : souvent vers le joueur, sinon vers un point au hasard
+    // 3. Direction : souvent vers le joueur, sinon vers un point au hasard
     let tx;
     let ty;
-    if (p && Math.random() < CONFIG.AIM_AT_PLAYER_CHANCE) {
-      tx = p.x + rand(-CONFIG.AIM_SPREAD, CONFIG.AIM_SPREAD);
-      ty = p.y + rand(-CONFIG.AIM_SPREAD, CONFIG.AIM_SPREAD);
+    if (p && aimAtPlayer) {
+      tx = p.x + spreadX;
+      ty = p.y + spreadY;
     } else {
-      tx = rand(W * 0.1, W * 0.9);
-      ty = rand(H * 0.1, H * 0.9);
+      tx = W * freeX;
+      ty = H * freeY;
     }
     const angle = Math.atan2(ty - y, tx - x);
-    const speed = (isSeeker
-      ? CONFIG.SEEKER_SPEED
-      : rand(CONFIG.SHARD_MIN_SPEED, CONFIG.SHARD_MAX_SPEED)) * speedMult;
+    const speed = baseSpeed * speedMult;
 
     const hazard = {
       type: type,
@@ -1079,41 +1446,32 @@
       speed: speed,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
-      rot: rand(0, TAU),
-      spin: rand(-3, 3),
+      rot: rot,
+      spin: spin,
       age: 0,
       entered: false,  // est déjà entré dans l'écran ?
       grazing: false,  // est en train de frôler le joueur ?
       grazed: false,   // bonus de frôlement déjà donné ?
       homing: isSeeker ? CONFIG.SEEKER_HOMING_TIME : 0,
       trailTimer: 0,
-      points: null,
+      points: points,
     };
-
-    // Forme irrégulière de l'éclat (5 à 8 sommets)
-    if (!isSeeker) {
-      const n = randInt(5, 8);
-      hazard.points = [];
-      for (let k = 0; k < n; k++) {
-        const a = (k / n) * TAU + rand(-0.2, 0.2);
-        const rr = r * rand(0.88, 1);
-        hazard.points.push(Math.cos(a) * rr, Math.sin(a) * rr);
-      }
-    }
     game.hazards.push(hazard);
   }
 
   function spawnWave() {
+    // Le hasard est tiré avant tout test, pour que la suite reste identique
+    const rng = spawnRng('hazard');
+    const wantSeeker = rng.chance(CONFIG.SEEKER_CHANCE);
+    const wantDouble = rng.chance(CONFIG.DOUBLE_SPAWN_CHANCE);
     if (game.hazards.length >= CONFIG.MAX_HAZARDS) return;
     const mult = speedMultiplier();
     let seekers = 0;
     for (const h of game.hazards) if (h.type === 'seeker') seekers++;
-    const seeker = game.level >= CONFIG.SEEKER_FROM_LEVEL &&
-                   seekers < CONFIG.SEEKER_MAX &&
-                   Math.random() < CONFIG.SEEKER_CHANCE;
-    spawnHazard(seeker ? 'seeker' : 'shard', mult);
-    if (game.level >= CONFIG.DOUBLE_SPAWN_FROM_LEVEL && Math.random() < CONFIG.DOUBLE_SPAWN_CHANCE) {
-      spawnHazard('shard', mult);
+    const seeker = game.level >= CONFIG.SEEKER_FROM_LEVEL && seekers < CONFIG.SEEKER_MAX && wantSeeker;
+    spawnHazard(seeker ? 'seeker' : 'shard', mult, rng);
+    if (game.level >= CONFIG.DOUBLE_SPAWN_FROM_LEVEL && wantDouble) {
+      spawnHazard('shard', mult, rng);
     }
   }
 
@@ -1161,15 +1519,15 @@
 
   // --- Énergie ---
 
-  function spawnEnergy() {
+  function spawnEnergy(rng) {
     if (game.energies.length >= CONFIG.MAX_ENERGY) return;
     const p = game.player;
     const margin = 60;
     let x = view.W / 2;
     let y = view.H / 2;
     for (let i = 0; i < 15; i++) {
-      x = rand(margin, view.W - margin);
-      y = rand(margin + 30, view.H - margin);
+      x = rng.range(margin, view.W - margin);
+      y = rng.range(margin + 30, view.H - margin);
       const d = p ? Math.hypot(x - p.x, y - p.y) : 999;
       if (d > 140) break;
     }
@@ -1204,25 +1562,31 @@
   function collectEnergy(e) {
     const p = game.player;
     e.collected = true;
-    game.score += CONFIG.ENERGY_POINTS;
+    addComboAction();
+    const points = CONFIG.ENERGY_POINTS * game.combo.mult;
+    game.score += points;
     game.stats.energy++;
     p.dashCooldown = 0; // l'énergie recharge le dash
     burst(e.x, e.y, { count: 22, colors: [COLORS.energy, COLORS.white], speed: [80, 260], life: [0.3, 0.6], size: [2, 4], drag: 3 });
     addRing(e.x, e.y, 10, 60, 0.4, COLORS.energy, 3);
-    addText(e.x, e.y - 22, '+' + CONFIG.ENERGY_POINTS, COLORS.energy, 20, 0.9, -45);
+    addText(e.x, e.y - 22, '+' + points, COLORS.energy, 20, 0.9, -45);
     Sound.collect();
   }
 
   // --- Lasers ---
 
-  function spawnLaser() {
+  function spawnLaser(rng) {
+    // Tirages d'abord, dans un ordre fixe
+    const offset = CONFIG.LASER_OFFSET;
+    const horizontal = rng.chance(0.5);
+    const shift1 = rng.range(-offset, offset);
+    const cross = rng.chance(0.4);
+    const shift2 = rng.range(-offset, offset);
     const p = game.player;
     if (!p || !p.alive) return;
-    const horizontal = Math.random() < 0.5;
-    const offset = CONFIG.LASER_OFFSET;
-    addLaser(horizontal, (horizontal ? p.y : p.x) + rand(-offset, offset));
-    if (game.level >= CONFIG.LASER_CROSS_FROM_LEVEL && Math.random() < 0.4) {
-      addLaser(!horizontal, (horizontal ? p.x : p.y) + rand(-offset, offset));
+    addLaser(horizontal, (horizontal ? p.y : p.x) + shift1);
+    if (game.level >= CONFIG.LASER_CROSS_FROM_LEVEL && cross) {
+      addLaser(!horizontal, (horizontal ? p.x : p.y) + shift2);
     }
     Sound.laserWarn();
   }
@@ -1266,20 +1630,21 @@
     game.timeScale = 1;
   }
 
-  function spawnPowerup() {
+  function spawnPowerup(rng) {
+    const pick = rng.next();
     if (game.powerups.length > 0) return; // un seul bonus à la fois sur le terrain
     const p = game.player;
     // De préférence un bonus qui n'est pas déjà actif
     let choices = POWERUP_TYPES.filter(function (t) { return game.effects[t] <= 0; });
     if (choices.length === 0) choices = POWERUP_TYPES;
-    const type = choices[randInt(0, choices.length - 1)];
+    const type = choices[Math.min(choices.length - 1, Math.floor(pick * choices.length))];
 
     const margin = 70;
     let x = view.W / 2;
     let y = view.H / 2;
     for (let i = 0; i < 15; i++) {
-      x = rand(margin, view.W - margin);
-      y = rand(margin + 30, view.H - margin);
+      x = rng.range(margin, view.W - margin);
+      y = rng.range(margin + 30, view.H - margin);
       if (!p || Math.hypot(x - p.x, y - p.y) > 160) break;
     }
     game.powerups.push({ type: type, x: x, y: y, r: CONFIG.POWERUP_RADIUS, life: CONFIG.POWERUP_LIFETIME, age: 0, collected: false });
@@ -1302,6 +1667,7 @@
     pu.collected = true;
     game.effects[pu.type] = powerupDuration(pu.type); // reprendre le même bonus recharge sa durée
     game.stats.powerups++;
+    addComboAction();
     burst(pu.x, pu.y, { count: 26, colors: [info.color, COLORS.white], speed: [80, 280], life: [0.3, 0.7], size: [2, 4], drag: 3 });
     addRing(pu.x, pu.y, 10, 80, 0.5, info.color, 3);
     addText(pu.x, pu.y - 28, info.name.toUpperCase() + ' !', info.color, 22, 1.1, -40);
@@ -1337,6 +1703,50 @@
     addText(p.x, p.y - 36, 'Bouclier brisé !', COLORS.shield, 16, 1, -40);
     game.shake = Math.max(game.shake, REDUCED_MOTION ? 2 : 8);
     Sound.shieldHit();
+    breakCombo(); // un coup encaissé fait perdre le combo
+  }
+
+  // --- Combo ---
+
+  // Une action réussie (frôlement, énergie, bonus) fait grimper le combo
+  function addComboAction() {
+    const c = game.combo;
+    c.chain++;
+    c.timer = CONFIG.COMBO_WINDOW;
+    const mult = Math.min(CONFIG.COMBO_MAX, 1 + Math.floor(c.chain / CONFIG.COMBO_STEP));
+    if (mult > c.mult) {
+      c.mult = mult;
+      if (mult > game.stats.bestCombo) game.stats.bestCombo = mult;
+      const p = game.player;
+      removeDead(game.texts, function (t) { return t.tag !== 'combo'; });
+      addText(p.x, p.y - 72, 'COMBO x' + mult + ' !', COLORS.combo, 18 + mult * 3, 1.1, -30, 'combo');
+      addRing(p.x, p.y, p.r + 6, 70 + mult * 10, 0.45, COLORS.combo, 3);
+      Sound.comboUp(mult);
+    }
+  }
+
+  function resetCombo() {
+    game.combo.chain = 0;
+    game.combo.mult = 1;
+    game.combo.timer = 0;
+  }
+
+  // Combo perdu (temps écoulé ou coup encaissé), avec un petit signal
+  function breakCombo() {
+    const p = game.player;
+    if (game.combo.mult > 1 && p) {
+      addText(p.x, p.y - 72, 'Combo perdu', COLORS.combo, 14, 0.9, -30, 'combo');
+      Sound.comboLost();
+    }
+    resetCombo();
+  }
+
+  // Le temps pour enchaîner s'écoule en temps réel (même pendant le ralenti)
+  function updateCombo(dt) {
+    const c = game.combo;
+    if (c.chain === 0) return;
+    c.timer -= dt;
+    if (c.timer <= 0) breakCombo();
   }
 
   // Petit clignotement d'un effet quand il va bientôt s'arrêter
@@ -1391,9 +1801,11 @@
         // L'éclat est passé tout près sans toucher : bonus !
         h.grazing = false;
         h.grazed = true;
-        game.score += CONFIG.NEAR_MISS_POINTS;
+        addComboAction();
+        const points = CONFIG.NEAR_MISS_POINTS * game.combo.mult;
+        game.score += points;
         game.stats.grazes++;
-        addText(p.x, p.y - 30, 'Frôlé ! +' + CONFIG.NEAR_MISS_POINTS, COLORS.player, 15, 0.8, -40);
+        addText(p.x, p.y - 30, 'Frôlé ! +' + points, shipColor(), 15, 0.8, -40);
         Sound.graze();
       }
     }
@@ -1435,7 +1847,7 @@
     game.ambientTimer -= dt;
     if (game.ambientTimer <= 0) {
       game.ambientTimer = CONFIG.MENU_SPAWN_INTERVAL;
-      if (game.hazards.length < 25) spawnHazard('shard', 0.55);
+      if (game.hazards.length < 25) spawnHazard('shard', 0.55, makeRng(Math.random));
     }
     updateHazards(dt, false);
     updateEffects(dt);
@@ -1454,9 +1866,11 @@
       game.level = level;
       onLevelUp();
     }
-    game.score += dt * CONFIG.POINTS_PER_SECOND * (1 + (game.level - 1) * CONFIG.SCORE_LEVEL_BONUS);
+    // Points de survie, multipliés par le combo
+    game.score += dt * CONFIG.POINTS_PER_SECOND * (1 + (game.level - 1) * CONFIG.SCORE_LEVEL_BONUS) * game.combo.mult;
 
     updateActivePowerups(dt);
+    updateCombo(dt);
     updatePlayer(dt);
 
     // Le ralenti n'agit que sur les dangers : le joueur garde toute sa vitesse
@@ -1470,20 +1884,23 @@
     }
     game.energyTimer -= dt;
     if (game.energyTimer <= 0) {
-      game.energyTimer = rand(CONFIG.ENERGY_MIN_INTERVAL, CONFIG.ENERGY_MAX_INTERVAL);
-      spawnEnergy();
+      const rng = spawnRng('energy');
+      game.energyTimer = rng.range(CONFIG.ENERGY_MIN_INTERVAL, CONFIG.ENERGY_MAX_INTERVAL);
+      spawnEnergy(rng);
     }
     game.powerupTimer -= dt;
     if (game.powerupTimer <= 0) {
-      game.powerupTimer = rand(CONFIG.POWERUP_MIN_INTERVAL, CONFIG.POWERUP_MAX_INTERVAL);
-      spawnPowerup();
+      const rng = spawnRng('powerup');
+      game.powerupTimer = rng.range(CONFIG.POWERUP_MIN_INTERVAL, CONFIG.POWERUP_MAX_INTERVAL);
+      spawnPowerup(rng);
     }
     if (game.level >= CONFIG.LASER_FROM_LEVEL) {
       game.laserTimer -= worldDt;
       if (game.laserTimer <= 0) {
+        const rng = spawnRng('laser');
         const faster = Math.max(0.6, 1 - (game.level - CONFIG.LASER_FROM_LEVEL) * 0.05);
-        game.laserTimer = rand(CONFIG.LASER_MIN_INTERVAL, CONFIG.LASER_MAX_INTERVAL) * faster;
-        spawnLaser();
+        game.laserTimer = rng.range(CONFIG.LASER_MIN_INTERVAL, CONFIG.LASER_MAX_INTERVAL) * faster;
+        spawnLaser(rng);
       }
     }
 
@@ -1573,9 +1990,10 @@
   }
 
   function explode(x, y) {
-    burst(x, y, { count: 80, colors: [COLORS.player, COLORS.white, COLORS.shard], speed: [80, 560], life: [0.5, 1.3], size: [2, 6], drag: 2.2 });
+    const color = shipColor();
+    burst(x, y, { count: 80, colors: [color, COLORS.white, COLORS.shard], speed: [80, 560], life: [0.5, 1.3], size: [2, 6], drag: 2.2 });
     addRing(x, y, 10, 170, 0.7, COLORS.white, 4);
-    addRing(x, y, 10, 280, 1.0, COLORS.player, 2);
+    addRing(x, y, 10, 280, 1.0, color, 2);
   }
 
   function updateEffects(dt) {
@@ -1950,43 +2368,106 @@
     }
 
     // Juste après un coup encaissé : le vaisseau clignote
-    if (p.grace > 0 && Math.floor(p.grace * 14) % 2 === 0) ctx.globalAlpha = 0.3;
+    const baseAlpha = p.grace > 0 && Math.floor(p.grace * 14) % 2 === 0 ? 0.3 : 1;
+    const ship = currentShip();
+    const color = shipColor();
 
     // Anneau qui indique la recharge du dash
     ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
     if (p.dashCooldown > 0) {
       const ready = 1 - p.dashCooldown / CONFIG.DASH_COOLDOWN;
-      ctx.strokeStyle = 'rgba(62, 242, 255, 0.35)';
-      ctx.beginPath();
+      ctx.globalAlpha = baseAlpha * 0.35;
       ctx.arc(0, 0, p.r + 9, -Math.PI / 2, -Math.PI / 2 + TAU * ready);
-      ctx.stroke();
     } else {
-      ctx.strokeStyle = 'rgba(62, 242, 255, 0.16)';
-      ctx.beginPath();
+      ctx.globalAlpha = baseAlpha * 0.16;
       ctx.arc(0, 0, p.r + 9, 0, TAU);
-      ctx.stroke();
     }
+    ctx.stroke();
+    ctx.globalAlpha = baseAlpha;
 
-    // Vaisseau
+    // Vaisseau (forme et couleur selon le vaisseau choisi)
     const dashing = p.dashTime > 0;
-    const r = p.r;
     ctx.rotate(p.angle);
-    ctx.shadowColor = COLORS.player;
+    ctx.shadowColor = color;
     ctx.shadowBlur = glow(dashing ? 30 : 18);
-    ctx.fillStyle = dashing ? COLORS.white : COLORS.player;
-    ctx.beginPath();
-    ctx.moveTo(r * 1.35, 0);
-    ctx.lineTo(-r * 0.9, -r * 0.85);
-    ctx.lineTo(-r * 0.45, 0);
-    ctx.lineTo(-r * 0.9, r * 0.85);
-    ctx.closePath();
+    ctx.fillStyle = dashing ? COLORS.white : color;
+    traceShip(ctx, ship.id, p.r);
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.fillStyle = COLORS.playerCore;
     ctx.beginPath();
-    ctx.arc(r * 0.1, 0, r * 0.28, 0, TAU);
+    ctx.arc(p.r * shipCoreX(ship), 0, p.r * 0.28, 0, TAU);
     ctx.fill();
     ctx.restore();
+  }
+
+  // Trace le contour d'un vaisseau (pointe vers la droite) dans le contexte c
+  function traceShip(c, id, r) {
+    c.beginPath();
+    if (id === 'comete') {
+      // Tête ronde + queue en flammes
+      c.arc(r * 0.4, 0, r * 0.66, 0, TAU);
+      c.moveTo(r * 0.35, -r * 0.6);
+      c.lineTo(-r * 0.85, -r * 0.62);
+      c.lineTo(-r * 0.55, -r * 0.22);
+      c.lineTo(-r * 1.55, 0);
+      c.lineTo(-r * 0.55, r * 0.22);
+      c.lineTo(-r * 0.85, r * 0.62);
+      c.lineTo(r * 0.35, r * 0.6);
+      c.closePath();
+      return;
+    }
+    const pts = SHIP_SHAPES[id] || SHIP_SHAPES.fleche;
+    c.moveTo(pts[0] * r, pts[1] * r);
+    for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i] * r, pts[i + 1] * r);
+    c.closePath();
+  }
+
+  // Position du petit cœur lumineux du vaisseau
+  function shipCoreX(ship) {
+    return ship.id === 'comete' ? 0.4 : 0.1;
+  }
+
+  // Aperçu d'un vaisseau dans l'écran "Vaisseaux"
+  function drawShipPreview(cv, ship, unlocked) {
+    const size = 64;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(size * dpr);
+    cv.height = Math.round(size * dpr);
+    const c = cv.getContext('2d');
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.translate(size / 2, size / 2 + 2);
+    c.rotate(-Math.PI / 2); // pointe vers le haut
+    c.lineJoin = 'round';
+    const r = 15;
+    if (!unlocked) {
+      // Bloqué : silhouette en pointillés
+      c.strokeStyle = 'rgba(232, 247, 255, 0.35)';
+      c.lineWidth = 1.5;
+      c.setLineDash([3, 3]);
+      traceShip(c, ship.id, r);
+      c.stroke();
+      return;
+    }
+    let fill = ship.color;
+    if (ship.rainbow) {
+      const g = c.createLinearGradient(-r * 1.4, 0, r * 1.5, 0);
+      const rainbow = ['#ff5c8a', '#ffd447', '#b6ff4a', '#3ef2ff', '#b388ff'];
+      rainbow.forEach(function (col, i) { g.addColorStop(i / (rainbow.length - 1), col); });
+      fill = g;
+    }
+    c.shadowColor = ship.rainbow ? '#ffffff' : ship.color;
+    c.shadowBlur = 12 * dpr;
+    c.fillStyle = fill;
+    traceShip(c, ship.id, r);
+    c.fill();
+    c.shadowBlur = 0;
+    c.fillStyle = COLORS.playerCore;
+    c.beginPath();
+    c.arc(r * shipCoreX(ship), 0, r * 0.28, 0, TAU);
+    c.fill();
   }
 
   function drawParticles() {
@@ -2035,8 +2516,9 @@
     const p = game.player;
     if (game.state !== 'playing' || game.resumeTimer <= 0 || !p) return;
     const k = game.resumeTimer / CONFIG.RESUME_DELAY;
+    const color = shipColor();
     ctx.globalAlpha = 0.85;
-    ctx.strokeStyle = COLORS.player;
+    ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r + 10 + 80 * k, 0, TAU);
@@ -2045,7 +2527,7 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = COLORS.text;
-    ctx.shadowColor = COLORS.player;
+    ctx.shadowColor = color;
     ctx.shadowBlur = glow(14);
     ctx.fillText('PRÊT ?', view.W / 2, view.H * 0.3);
     ctx.shadowBlur = 0;
@@ -2091,11 +2573,16 @@
   function init() {
     buildPowerupHud();
 
+    game.shipId = loadShipId();
+
     // Boutons
-    bindButton('btn-play', startGame);
+    bindButton('btn-play', function () { startGame('normal'); });
+    bindButton('btn-daily', function () { startGame('daily'); });
+    bindButton('btn-ships', openHangar);
+    bindButton('btn-hangar-back', closeHangar);
     bindButton('btn-resume', resumeGame);
     bindButton('btn-quit', function () { Sound.click(); goToMenu(); });
-    bindButton('btn-replay', startGame);
+    bindButton('btn-replay', function () { startGame(game.mode); });
     bindButton('btn-menu', function () { Sound.click(); goToMenu(); });
     bindButton('btn-pause', pauseGame);
     bindButton('btn-sound', toggleMute);
@@ -2143,7 +2630,7 @@
     resize();
 
     // Interface de départ
-    ui.menuBest.textContent = formatScore(game.best);
+    refreshMenu();
     refreshSoundButton();
     showScreen('menu');
     setState('menu');

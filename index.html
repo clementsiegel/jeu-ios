@@ -31,7 +31,7 @@
         <span class="hud-value" id="hud-score">0</span>
       </div>
       <div class="hud-item">
-        <span class="hud-label">Record</span>
+        <span class="hud-label" id="hud-best-label">Record</span>
         <span class="hud-value hud-best" id="hud-best">0</span>
       </div>
       <div class="hud-item">
@@ -40,8 +40,17 @@
       </div>
     </div>
 
-    <!-- Bonus actifs : nom + temps restant (rempli par game.js) -->
-    <div id="powerups" class="hidden" aria-label="Bonus actifs"></div>
+    <!-- Sous le score : combo en cours, puis bonus actifs (remplis par game.js) -->
+    <div id="powerups" class="hidden" aria-label="Combo et bonus actifs">
+      <div id="combo" class="combo hidden">
+        <span class="combo-label">Combo</span>
+        <span class="combo-mult" id="combo-mult">x1</span>
+        <span class="combo-info">
+          <span class="combo-steps" id="combo-steps">○○○</span>
+          <span class="combo-bar"><i id="combo-bar"></i></span>
+        </span>
+      </div>
+    </div>
 
     <!-- Boutons en haut à droite : pause et son -->
     <div id="top-buttons">
@@ -60,8 +69,12 @@
         <h1 id="menu-title" class="title">ÉCLATS <span>NÉON</span></h1>
         <p class="tagline">Esquive les éclats, attrape l'énergie et survis le plus longtemps possible.</p>
 
-        <button type="button" id="btn-play" class="btn btn-primary">Jouer</button>
-        <p class="best-line">Record : <strong id="menu-best">0</strong></p>
+        <div class="menu-actions">
+          <button type="button" id="btn-play" class="btn btn-primary">Jouer</button>
+          <button type="button" id="btn-daily" class="btn btn-daily">Défi du jour</button>
+          <button type="button" id="btn-ships" class="btn">Vaisseaux</button>
+        </div>
+        <p class="best-line">Record : <strong id="menu-best">0</strong> · Défi du jour : <strong id="menu-daily" class="daily-best">0</strong></p>
 
         <div class="cards">
           <div class="card">
@@ -91,13 +104,14 @@
           <div class="card">
             <h2>À savoir</h2>
             <ul class="legend">
-              <li><i class="dot dot-player"></i><span><b>Toi</b> : le vaisseau cyan</span></li>
+              <li><i class="dot dot-player"></i><span><b>Toi</b> : ton vaisseau (à choisir dans « Vaisseaux »)</span></li>
               <li><i class="dot dot-shard"></i><span><b>Éclats</b> : ne les touche pas</span></li>
               <li><i class="dot dot-seeker"></i><span><b>Traqueurs</b> : ils te suivent (niveau 3)</span></li>
               <li><i class="dot dot-laser"></i><span><b>Lasers</b> : quitte la zone avant le tir (niveau 4)</span></li>
               <li><i class="dot dot-energy"></i><span><b>Énergie</b> : +100 points et dash rechargé</span></li>
               <li><i class="dot dot-graze"></i><span><b>Frôler</b> un éclat sans le toucher : +25 points</span></li>
               <li><i class="dot dot-power"></i><span><b>Bonus</b> : <span class="c-shield">bouclier</span>, <span class="c-slow">ralenti</span> ou <span class="c-magnet">aimant</span></span></li>
+              <li><i class="dot dot-combo"></i><span><b>Combo</b> : enchaîne frôlements et énergie, jusqu'à x5</span></li>
             </ul>
           </div>
         </div>
@@ -119,8 +133,12 @@
     <!-- ===== Écran de fin de partie ===== -->
     <section id="screen-gameover" class="screen" aria-labelledby="go-title">
       <div class="panel panel-small">
+        <p id="go-mode" class="mode-tag hidden">Défi du jour</p>
         <h2 id="go-title" class="screen-title gameover-title">PARTIE TERMINÉE</h2>
-        <p id="go-record" class="record-badge hidden">Nouveau record !</p>
+        <div class="badges">
+          <p id="go-record" class="record-badge hidden">Nouveau record !</p>
+          <p id="go-unlock" class="unlock-badge hidden"></p>
+        </div>
 
         <div class="final-score">
           <span class="final-label">Score</span>
@@ -128,19 +146,35 @@
         </div>
 
         <div class="stats">
-          <div class="stat"><span id="go-best">0</span><small>Record</small></div>
+          <div class="stat"><span id="go-best">0</span><small id="go-best-label">Record</small></div>
           <div class="stat"><span id="go-time">0:00</span><small>Temps</small></div>
           <div class="stat"><span id="go-level">1</span><small>Niveau</small></div>
+          <div class="stat"><span id="go-combo">x1</span><small>Combo max</small></div>
           <div class="stat"><span id="go-energy">0</span><small>Énergie</small></div>
           <div class="stat"><span id="go-graze">0</span><small>Frôlements</small></div>
           <div class="stat"><span id="go-powerups">0</span><small>Bonus</small></div>
+          <div class="stat"><span id="go-points">0</span><small>Points cumulés</small></div>
         </div>
+        <p id="go-progress" class="progress-line"></p>
 
         <div class="btn-row">
           <button type="button" id="btn-replay" class="btn btn-primary">Rejouer</button>
           <button type="button" id="btn-menu" class="btn">Menu principal</button>
         </div>
         <p class="hint">Appuie sur <kbd>Entrée</kbd> pour rejouer.</p>
+      </div>
+    </section>
+
+    <!-- ===== Écran des vaisseaux ===== -->
+    <section id="screen-hangar" class="screen" aria-labelledby="hangar-title">
+      <div class="panel panel-small">
+        <h2 id="hangar-title" class="screen-title hangar-title">VAISSEAUX</h2>
+        <p class="hint">Points cumulés : <strong id="hangar-points" class="points-value">0</strong></p>
+        <p class="hint hint-small">Chaque partie ajoute son score. Les vaisseaux changent seulement l'apparence : le jeu reste équitable.</p>
+        <div id="ships" class="ships"></div>
+        <div class="btn-row">
+          <button type="button" id="btn-hangar-back" class="btn">Retour</button>
+        </div>
       </div>
     </section>
 

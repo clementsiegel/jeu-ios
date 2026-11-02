@@ -171,6 +171,73 @@ body {
   50% { opacity: 0.4; }
 }
 
+/* ---------- Combo (sous le score) ---------- */
+.combo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 240, 255, 0.45);
+  background: rgba(12, 6, 34, 0.72);
+  box-shadow: 0 0 12px -4px rgba(244, 240, 255, 0.8);
+}
+
+.combo-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.combo-mult {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(244, 240, 255, 0.8);
+}
+
+.combo.hot .combo-mult {
+  color: var(--yellow);
+  text-shadow: 0 0 10px rgba(255, 225, 77, 0.9);
+  animation: combo-pulse 0.45s ease-in-out infinite alternate;
+}
+
+.combo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.combo-steps {
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.15em;
+  color: #ffffff;
+}
+
+.combo-bar {
+  width: 54px;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.combo-bar i {
+  display: block;
+  height: 100%;
+  background: #ffffff;
+  transform-origin: left center;
+}
+
+@keyframes combo-pulse {
+  from { transform: scale(1); }
+  to   { transform: scale(1.12); }
+}
+
 /* ---------- Boutons ronds (pause, son) ---------- */
 #top-buttons {
   position: absolute;
@@ -367,6 +434,25 @@ body {
   margin-top: 24px;
 }
 
+/* Boutons du menu : Jouer, Défi du jour, Vaisseaux */
+.menu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-daily {
+  border-color: rgba(255, 225, 77, 0.55);
+  color: var(--yellow);
+}
+
+.btn-daily:hover {
+  border-color: var(--yellow);
+  box-shadow: 0 0 18px rgba(255, 225, 77, 0.35);
+}
+
 /* ---------- Cartes du menu ---------- */
 .cards {
   display: grid;
@@ -465,6 +551,7 @@ kbd {
 .dot-energy { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); transform: rotate(45deg); border-radius: 2px; width: 10px; height: 10px; }
 .dot-graze  { border: 2px dashed var(--cyan); }
 .dot-power  { background: conic-gradient(#4dffa6 0 33%, #b388ff 0 66%, #5c8dff 0); box-shadow: 0 0 8px rgba(179, 136, 255, 0.7); }
+.dot-combo  { border-radius: 3px; background: #f4f0ff; box-shadow: 0 0 8px rgba(244, 240, 255, 0.9); transform: rotate(45deg) scale(0.8); }
 .c-shield   { color: #4dffa6; }
 .c-slow     { color: #b388ff; }
 .c-magnet   { color: #5c8dff; }
@@ -533,8 +620,157 @@ kbd {
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
+}
+
+.mode-tag {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 225, 77, 0.55);
+  color: var(--yellow);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.unlock-badge {
+  display: inline-block;
+  margin: 4px 0 6px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid #b6ff4a;
+  color: #b6ff4a;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 10px rgba(182, 255, 74, 0.6);
+  box-shadow: 0 0 18px rgba(182, 255, 74, 0.3);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.progress-line {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ---------- Écran des vaisseaux ---------- */
+.hangar-title {
+  color: #eaffff;
+  text-shadow: 0 0 8px var(--cyan), 0 0 26px var(--cyan);
+}
+
+.points-value {
+  font-family: var(--mono);
+  color: var(--yellow);
+  text-shadow: 0 0 8px rgba(255, 225, 77, 0.5);
+}
+
+.hint-small {
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+
+.ships {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.ship-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px 12px;
+  border-radius: 14px;
+  border: 1.5px solid var(--panel-border);
+  background: var(--panel-bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ship-tile:hover {
+  border-color: var(--ship-color);
+}
+
+.ship-tile.selected {
+  border-color: var(--ship-color);
+  box-shadow: 0 0 16px -2px var(--ship-color);
+}
+
+.ship-tile.locked {
+  cursor: not-allowed;
+}
+
+.ship-tile.locked:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.ship-tile:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+.ship-preview {
+  width: 64px;
+  height: 64px;
+}
+
+.ship-name {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.ship-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ship-tile.selected .ship-status {
+  color: var(--ship-color);
+  font-weight: 700;
+}
+
+.ship-progress {
+  width: 70%;
+  height: 3px;
+  margin-top: 2px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ship-progress i {
+  display: block;
+  height: 100%;
+  background: var(--yellow);
+  transform-origin: left center;
+}
+
+.ship-tile.shake {
+  animation: shake 0.35s;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
 }
 
 .stat {
@@ -635,12 +871,38 @@ kbd {
   .btn-primary {
     padding: 14px 40px;
   }
+
+  /* Menu : "Jouer" sur toute la largeur, les deux autres boutons dessous */
+  .menu-actions .btn-primary {
+    flex-basis: 100%;
+  }
+
+  .menu-actions .btn:not(.btn-primary) {
+    flex: 1;
+    padding: 12px 10px;
+  }
+
+  .stat span {
+    font-size: 16px;
+  }
+
+  .stat small {
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+
+  .ships {
+    gap: 8px;
+  }
 }
 
 /* ---------- Pour les personnes sensibles aux animations ---------- */
 @media (prefers-reduced-motion: reduce) {
   .title,
   .record-badge,
+  .unlock-badge,
+  .combo.hot .combo-mult,
+  .ship-tile.shake,
   .pu-chip.ending,
   #screen-gameover.visible .panel,
   #screen-gameover.visible .gameover-title,
