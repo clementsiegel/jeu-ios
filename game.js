@@ -252,6 +252,9 @@
     unlock() {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
+      // Le navigateur n'autorise le son qu'au moment d'une vraie action du joueur
+      // (clic, touche, doigt qui se lève) : on attend ce moment-là.
+      if (navigator.userActivation && !navigator.userActivation.isActive) return;
       if (!this.ctx) {
         try {
           this.ctx = new AudioCtx();
