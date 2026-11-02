@@ -26,6 +26,9 @@
     <!-- Zone de dessin du jeu -->
     <canvas id="game" aria-label="Zone de jeu Éclats Néon"></canvas>
 
+    <!-- Sert seulement à mesurer la barre du bas des iPhone (invisible) -->
+    <div id="safe-probe" aria-hidden="true"></div>
+
     <!-- Informations pendant la partie -->
     <div id="hud" class="hidden">
       <div class="hud-item">
@@ -279,6 +282,7 @@
         <div class="btn-row">
           <button type="button" id="btn-settings-back" class="btn">Retour</button>
         </div>
+        <p class="version-line">Éclats Néon · version <span id="game-version">1.8</span></p>
       </div>
     </section>
 

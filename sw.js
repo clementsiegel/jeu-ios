@@ -6,12 +6,13 @@
    Ensuite, le jeu se lance même sans internet (mode avion).
 
    IMPORTANT : après chaque modification du jeu, change le numéro de
-   VERSION ci-dessous (v2, v3…). Sinon les appareils garderont l'ancienne
-   copie. La nouvelle version est récupérée dès que le jeu est ouvert
-   avec internet, puis utilisée au lancement suivant.
+   VERSION ci-dessous (le même que GAME_VERSION dans game.js : 1.8, 1.81,
+   1.9…). Sinon les appareils garderont l'ancienne copie. La nouvelle
+   version est récupérée dès que le jeu est ouvert avec internet, puis
+   utilisée au lancement suivant.
    ====================================================================== */
 
-const VERSION = 'eclats-neon-v7';
+const VERSION = 'eclats-neon-1.8'; // même numéro que GAME_VERSION dans game.js
 
 // Tous les fichiers nécessaires pour jouer
 const FILES = [

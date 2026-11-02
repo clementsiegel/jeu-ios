@@ -26,6 +26,11 @@
      1. RÉGLAGES
      ==================================================================== */
 
+  // Version du jeu, affichée dans les Réglages. À augmenter à chaque mise à jour :
+  // grosse mise à jour 1.8 -> 1.9, petite correction 1.8 -> 1.81 -> 1.82.
+  // Penser à mettre la même dans VERSION, en haut de sw.js (mode hors ligne).
+  const GAME_VERSION = '1.8';
+
   const CONFIG = {
     // --- Affichage ---
     WORLD_SHORT_SIDE: 720,   // le plus petit côté de l'écran vaut toujours 720 unités de jeu
@@ -731,28 +736,59 @@
     H: CONFIG.WORLD_SHORT_SIDE, // hauteur du monde en unités
     cssW: 0,     // taille de l'écran (pixels CSS) au dernier redimensionnement
     cssH: 0,
+    // Zone de jeu dans l'écran (pixels CSS). Sur téléphone en portrait, elle
+    // s'arrête sous le score et au-dessus du joystick / bouton DASH.
+    ox: 0,
+    oy: 0,
+    fw: 0,
+    fh: 0,
+    framed: false, // true quand la zone est plus petite que l'écran (cadre dessiné)
+    key: '',
   };
 
   let stars = [];
 
+  // Calcule la zone de jeu selon l'écran
+  function computePlayfield(w, h) {
+    const full = { x: 0, y: 0, w: w, h: h, framed: false };
+    // Seulement sur écran tactile, en portrait (en paysage et sur ordinateur : tout l'écran)
+    if (!input.touchMode || h < w * 1.15) return full;
+    const buttons = $('top-buttons').getBoundingClientRect();
+    const probe = $('safe-probe').getBoundingClientRect();
+    const safeBottom = Math.max(0, h - probe.bottom);
+    const top = Math.round(buttons.bottom + 10);                         // sous le score et les boutons
+    const bottom = Math.round(Math.max(24, safeBottom) + 84 + 16);       // au-dessus du joystick et de DASH
+    const fh = h - top - bottom;
+    if (fh < w * 0.9) return full; // écran trop court : on garde tout
+    return { x: 0, y: top, w: w, h: fh, framed: true };
+  }
+
   function resize() {
-    // Taille réelle de la zone de jeu (fiable sur iPhone après une rotation)
+    // Taille réelle de l'écran (fiable sur iPhone après une rotation)
     const w = Math.max(1, Math.round(canvas.clientWidth || window.innerWidth));
     const h = Math.max(1, Math.round(canvas.clientHeight || window.innerHeight));
     const dpr = Math.min(window.devicePixelRatio || 1, CONFIG.MAX_PIXEL_RATIO);
-    if (w === view.cssW && h === view.cssH && dpr === view.dpr) return; // rien n'a changé
+    const field = computePlayfield(w, h);
+    const key = [w, h, dpr, field.x, field.y, field.w, field.h].join(',');
+    if (key === view.key) return; // rien n'a changé
 
     const oldW = view.W;
     const oldH = view.H;
     const oldRatio = view.cssW ? view.cssW / view.cssH : 0;
+    view.key = key;
     view.cssW = w;
     view.cssH = h;
     view.dpr = dpr;
+    view.ox = field.x;
+    view.oy = field.y;
+    view.fw = field.w;
+    view.fh = field.h;
+    view.framed = field.framed;
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
-    view.scale = Math.min(w, h) / CONFIG.WORLD_SHORT_SIDE;
-    view.W = w / view.scale;
-    view.H = h / view.scale;
+    view.scale = Math.min(field.w, field.h) / CONFIG.WORLD_SHORT_SIDE;
+    view.W = field.w / view.scale;
+    view.H = field.h / view.scale;
     createStars();
     updateJoystickHome();
 
@@ -1167,6 +1203,7 @@
     if (input.touchMode === enabled) return;
     input.touchMode = enabled;
     updateUI();
+    resize(); // la zone de jeu dépend du mode tactile
   }
 
   function onKeyDown(e) {
@@ -1225,8 +1262,8 @@
   function pointerToWorld(e) {
     const rect = canvas.getBoundingClientRect();
     return {
-      x: (e.clientX - rect.left) / view.scale,
-      y: (e.clientY - rect.top) / view.scale,
+      x: (e.clientX - rect.left - view.ox) / view.scale,
+      y: (e.clientY - rect.top - view.oy) / view.scale,
     };
   }
 
@@ -3289,7 +3326,16 @@
       sx = rand(-1, 1) * game.shake;
       sy = rand(-1, 1) * game.shake;
     }
-    ctx.setTransform(k, 0, 0, k, sx * k, sy * k);
+    // Zone de jeu : sur téléphone en portrait, rien ne dépasse du cadre
+    const ox = view.ox * view.dpr;
+    const oy = view.oy * view.dpr;
+    if (view.framed) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(ox, oy, view.fw * view.dpr, view.fh * view.dpr);
+      ctx.clip();
+    }
+    ctx.setTransform(k, 0, 0, k, ox + sx * k, oy + sy * k);
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
 
@@ -3309,6 +3355,10 @@
     drawRings();
     drawTexts();
     drawResumeHint();
+    if (view.framed) {
+      ctx.restore();
+      drawFieldFrame();
+    }
 
     // Teinte violette pendant le ralenti
     const slowAmount = (1 - game.timeScale) / (1 - CONFIG.SLOW_FACTOR);
@@ -3330,6 +3380,26 @@
     }
 
     drawJoystick();
+  }
+
+  // Limites haut et bas de la zone de jeu (téléphone en portrait) : deux lignes néon
+  function drawFieldFrame() {
+    const d = view.dpr;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    ctx.globalAlpha = 1;
+    const line = function (y) {
+      const g = ctx.createLinearGradient(0, 0, view.cssW, 0);
+      g.addColorStop(0, 'rgba(62, 242, 255, 0)');
+      g.addColorStop(0.5, 'rgba(62, 242, 255, 0.6)');
+      g.addColorStop(1, 'rgba(62, 242, 255, 0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, y - 1, view.cssW, 2);
+    };
+    ctx.shadowColor = COLORS.player;
+    ctx.shadowBlur = 8 * d;
+    line(view.oy);
+    line(view.oy + view.fh);
+    ctx.shadowBlur = 0;
   }
 
   // Joystick tactile, dessiné en pixels d'écran par-dessus le jeu
@@ -4171,6 +4241,7 @@
     resize();
 
     // Interface de départ
+    $('game-version').textContent = GAME_VERSION;
     refreshMenu();
     refreshSoundButton();
     showScreen('menu');
