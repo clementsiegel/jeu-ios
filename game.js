@@ -29,7 +29,7 @@
   // Version du jeu, affichée dans les Réglages. À augmenter à chaque mise à jour :
   // grosse mise à jour 1.8 -> 1.9, petite correction 1.8 -> 1.81 -> 1.82.
   // Penser à mettre la même dans VERSION, en haut de sw.js (mode hors ligne).
-  const GAME_VERSION = '2.0';
+  const GAME_VERSION = '2.0.1';
 
   // --- Classement en ligne (Supabase) ---
   // Les 2 codes se trouvent dans Supabase, bouton "Connect" du projet
@@ -364,6 +364,41 @@
     chaos:      { name: 'Chaos',            record: 'Record Chaos' },
   };
   const EXTRA_MODES = ['bossrush', 'extreme', 'chaos']; // records rangés ensemble
+
+  // Boss : un nouveau à chaque fois, de plus en plus dur. Après le 5ᵉ, ils reviennent
+  // en version II, III… (plus rapides, attaques plus serrées, un peu plus longs).
+  //   duration : secondes à survivre · interval : rythme des attaques (plus petit = plus vite)
+  //   size : taille · sides : nombre de côtés · sway : amplitude de ses déplacements
+  //   attacks : ses attaques (voir bossAttack)
+  const BOSSES = [
+    { name: 'Noyau', color: '#ff2d6f', core: '#ffb13d', sides: 8, size: 1, sway: 1, duration: 20, interval: 1,
+      attacks: ['ring', 'beam', 'seekers'] },
+    { name: 'Sentinelle', color: '#ff8a3d', core: '#fff0c2', sides: 4, size: 1, sway: 1.2, duration: 22, interval: 0.92,
+      attacks: ['lasers', 'spiral', 'ring', 'seekers'] },
+    { name: 'Hydre', color: '#ff3dd8', core: '#ffd1f5', sides: 3, size: 1.05, sway: 1.3, duration: 24, interval: 0.86,
+      attacks: ['twinBeam', 'swarm', 'mines', 'doubleRing'] },
+    { name: 'Titan', color: '#ff4a3d', core: '#ffe14d', sides: 6, size: 1.2, sway: 0.8, duration: 26, interval: 0.8,
+      attacks: ['charge', 'spiral', 'wall', 'twinBeam', 'ring'] },
+    { name: 'Néant', color: '#b34dff', core: '#f4e6ff', sides: 10, size: 1.1, sway: 1.4, duration: 28, interval: 0.74,
+      attacks: ['hole', 'doubleSpiral', 'charge', 'doubleRing', 'lasers'] },
+  ];
+  const BOSS_LEVELS = ['', ' II', ' III', ' IV', ' V', ' VI', ' VII', ' VIII', ' IX', ' X'];
+
+  // Le boss numéro n de la partie : lequel, et à quel point il est renforcé
+  function bossInfo(number) {
+    const index = (number - 1) % BOSSES.length;
+    const cycle = Math.floor((number - 1) / BOSSES.length);
+    const def = BOSSES[index];
+    return {
+      def: def,
+      index: index,
+      cycle: cycle,
+      name: def.name + (cycle < BOSS_LEVELS.length ? BOSS_LEVELS[cycle] : ' ' + (cycle + 1)),
+      duration: def.duration + cycle * 2,
+      speed: 1 + 0.15 * cycle,                      // vitesse de ses projectiles
+      interval: def.interval * Math.pow(0.88, cycle), // attaques de plus en plus rapprochées
+    };
+  }
 
   // Vaisseaux : chacun a une spécialité. On les débloque avec les points
   // cumulés et, pour les plus rares, un exploit (need, voir SHIP_NEEDS).
@@ -1029,6 +1064,12 @@
       b.x *= sx;
       b.y *= sy;
       b.targetY = Math.max(view.H * 0.24, 190);
+      if (b.charge) {
+        b.charge.fromX *= sx;
+        b.charge.fromY *= sy;
+        b.charge.toX *= sx;
+        b.charge.toY *= sy;
+      }
     }
   }
 
@@ -1158,10 +1199,22 @@
       rot: 0,
       attackTimer: 0,
       attackIndex: 0,
-      order: [0, 1, 2],
+      order: [],       // ses attaques, dans un ordre mélangé
       glow: 0,
       rng: null,
       number: 0,       // combien de boss dans cette partie
+      name: 'Noyau',
+      index: 0,        // lequel des 5 boss
+      color: COLORS.boss,
+      core: COLORS.bossCore,
+      sides: 8,
+      sway: 1,
+      r: CONFIG.BOSS_RADIUS,
+      duration: CONFIG.BOSS_DURATION,
+      interval: 1,
+      speedK: 1,
+      queue: [],       // tirs programmés (spirales, double couronne)
+      charge: null,    // charge du Titan et du Néant
     };
   }
 
@@ -1238,6 +1291,7 @@
     { id: 'veteran', icon: '🎖️', name: 'Vétéran', desc: 'Atteins le niveau 10.', points: 500, stat: 'level', target: 10 },
     { id: 'evade', icon: '🌀', name: 'Évadé', desc: 'Échappe à un trou noir qui t\'attirait.', points: 300 },
     { id: 'marathon', icon: '🏰', name: 'Marathon de boss', desc: 'Survis à 3 boss en Boss Rush.', points: 800 },
+    { id: 'neant', icon: '🌑', name: 'Vainqueur du Néant', desc: 'Survis au 5ᵉ boss : le Néant.', points: 1500 },
     { id: 'extreme', icon: '🌶️', name: 'Extrême', desc: 'Atteins le combo x10 en mode Extrême.', points: 800 },
     { id: 'chaos', icon: '🌪️', name: 'Maître du chaos', desc: 'Survis 90 s en mode Chaos.', points: 600 },
     { id: 'demolisseur', icon: '💣', name: 'Démolisseur', desc: 'Détruis 12 dangers d\'un coup avec une bombe.', points: 400 },
@@ -1898,8 +1952,8 @@
     }
     const b = game.boss;
     if (b.active && b.phase !== 'leave') {
-      const left = b.phase === 'enter' ? CONFIG.BOSS_DURATION : Math.max(0, CONFIG.BOSS_ENTER_TIME + CONFIG.BOSS_DURATION - b.t);
-      return { label: 'Boss', value: Math.ceil(left) + ' s', ratio: left / CONFIG.BOSS_DURATION };
+      const left = b.phase === 'enter' ? b.duration : Math.max(0, CONFIG.BOSS_ENTER_TIME + b.duration - b.t);
+      return { label: 'Boss', value: Math.ceil(left) + ' s', ratio: left / b.duration };
     }
     if (game.mode === 'bossrush') {
       return { label: 'Boss suivant', value: Math.ceil(game.rushTimer) + ' s', ratio: -1 };
@@ -3957,17 +4011,29 @@
   function startBoss() {
     const rng = spawnRng('boss');
     const number = game.boss.number + 1;
+    const info = bossInfo(number);
     const b = createBoss();
     b.active = true;
     b.phase = 'enter';
     b.number = number;
     b.rng = rng;
+    b.name = info.name;
+    b.index = info.index;
+    b.color = info.def.color;
+    b.core = info.def.core;
+    b.sides = info.def.sides;
+    b.sway = info.def.sway;
+    b.r = CONFIG.BOSS_RADIUS * info.def.size;
+    b.duration = info.duration;
+    b.interval = info.interval;
+    b.speedK = info.speed;
     b.x = view.W / 2;
     b.targetY = Math.max(view.H * 0.24, 190);
-    b.y = -CONFIG.BOSS_RADIUS * 2;
+    b.y = -b.r * 2;
     b.alpha = 1;
     // Ordre des attaques mélangé
-    for (let i = 2; i > 0; i--) {
+    b.order = info.def.attacks.slice();
+    for (let i = b.order.length - 1; i > 0; i--) {
       const j = rng.int(0, i);
       const tmp = b.order[i];
       b.order[i] = b.order[j];
@@ -3978,38 +4044,60 @@
     Sound.bossAlarm();
   }
 
+  // Position de patrouille du boss (il se balance de gauche à droite)
+  function bossPatrol(b) {
+    const tt = b.t - CONFIG.BOSS_ENTER_TIME;
+    const amp = Math.min(140 * b.sway, view.W * 0.3);
+    return {
+      x: view.W / 2 + Math.sin(tt * 0.7 * b.sway) * amp,
+      y: b.targetY + Math.sin(tt * 1.3) * 12 + (b.index === 4 ? Math.sin(tt * 1.4) * 40 : 0),
+    };
+  }
+
   function updateBoss(dt) {
     const b = game.boss;
     if (!b.active) return;
     b.t += dt;
     b.rot += dt * (b.phase === 'fight' ? 0.9 : 0.4);
     const enterEnd = CONFIG.BOSS_ENTER_TIME;
-    const fightEnd = enterEnd + CONFIG.BOSS_DURATION;
+    const fightEnd = enterEnd + b.duration;
     if (b.phase === 'enter') {
       const k = clamp(b.t / enterEnd, 0, 1);
       const ease = 1 - Math.pow(1 - k, 3);
-      b.y = -CONFIG.BOSS_RADIUS * 2 + (b.targetY + CONFIG.BOSS_RADIUS * 2) * ease;
+      b.y = -b.r * 2 + (b.targetY + b.r * 2) * ease;
       if (b.t >= enterEnd) b.phase = 'fight';
     } else if (b.phase === 'fight') {
-      b.x = view.W / 2 + Math.sin((b.t - enterEnd) * 0.7) * Math.min(140, view.W * 0.18);
-      b.y = b.targetY + Math.sin((b.t - enterEnd) * 1.3) * 12;
-      b.attackTimer -= dt;
-      b.glow = clamp(1 - b.attackTimer / CONFIG.BOSS_TELEGRAPH, 0, 1);
-      if (b.attackTimer <= CONFIG.BOSS_TELEGRAPH && !b.charging) {
+      if (b.charge) updateBossCharge(b, dt);
+      else {
+        const pos = bossPatrol(b);
+        b.x = pos.x;
+        b.y = pos.y;
+        b.attackTimer -= dt;
+      }
+      // Tirs programmés (spirales, deuxième couronne)
+      for (const q of b.queue) {
+        q.t -= dt;
+        if (q.t <= 0) q.fire();
+      }
+      removeDead(b.queue, function (q) { return q.t > 0; });
+
+      b.glow = b.charge ? 0 : clamp(1 - b.attackTimer / CONFIG.BOSS_TELEGRAPH, 0, 1);
+      if (b.attackTimer <= CONFIG.BOSS_TELEGRAPH && !b.charging && !b.charge) {
         b.charging = true;
         Sound.bossCharge();
       }
       if (b.attackTimer <= 0) {
-        bossAttack(b.order[b.attackIndex % 3]);
+        bossAttack(b.order[b.attackIndex % b.order.length]);
         b.attackIndex++;
-        b.attackTimer = CONFIG.BOSS_ATTACK_INTERVAL * Math.max(0.65, 1 - (b.number - 1) * 0.1);
+        b.attackTimer = Math.max(1.5, CONFIG.BOSS_ATTACK_INTERVAL * b.interval);
         b.charging = false;
         b.glow = 0;
       }
       if (b.t >= fightEnd) bossDefeated();
     } else {
       const k = clamp((b.t - fightEnd) / CONFIG.BOSS_LEAVE_TIME, 0, 1);
-      b.y = b.targetY - (b.targetY + CONFIG.BOSS_RADIUS * 3) * k * k;
+      const fromY = b.leaveY === undefined ? b.targetY : b.leaveY;
+      b.y = fromY - (fromY + b.r * 3) * k * k;
       b.alpha = 1 - k;
       if (k >= 1) {
         b.active = false;
@@ -4018,44 +4106,165 @@
     }
   }
 
-  // Les 3 attaques du boss (tirages toujours dans le même ordre : défi du jour identique)
+  // Charge (Titan, Néant) : il vise, fonce sur l'endroit visé, puis revient
+  function updateBossCharge(b, dt) {
+    const c = b.charge;
+    c.t += dt;
+    if (c.phase === 'aim') {
+      b.x = c.fromX;
+      b.y = c.fromY;
+      if (c.t >= 0.85) {
+        c.phase = 'go';
+        c.t = 0;
+        Sound.dash();
+      }
+    } else if (c.phase === 'go') {
+      const k = clamp(c.t / 0.35, 0, 1);
+      const ease = k * k;
+      b.x = c.fromX + (c.toX - c.fromX) * ease;
+      b.y = c.fromY + (c.toY - c.fromY) * ease;
+      if (k >= 1) {
+        c.phase = 'back';
+        c.t = 0;
+        game.shake = Math.max(game.shake, reducedFx() ? 3 : 12);
+        burst(b.x, b.y, { count: 40, colors: [b.color, b.core, COLORS.white], speed: [80, 360], life: [0.3, 0.7], size: [2, 5], drag: 2.5 });
+        addRing(b.x, b.y, b.r, b.r * 2.6, 0.5, b.color, 4);
+        Sound.mineBoom();
+      }
+    } else {
+      const k = clamp(c.t / 0.9, 0, 1);
+      const ease = 1 - Math.pow(1 - k, 3);
+      const home = bossPatrol(b);
+      b.x = c.toX + (home.x - c.toX) * ease;
+      b.y = c.toY + (home.y - c.toY) * ease;
+      if (k >= 1) b.charge = null;
+    }
+  }
+
+  // Formes des éclats d'une attaque, tirées à l'avance (le défi du jour reste identique)
+  function bossShards(rng, n, rMin, rMax) {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const r = rng.range(rMin, rMax);
+      out.push({ r: r, rot: rng.range(0, TAU), spin: rng.range(-4, 4), points: shardShape(r, rng) });
+    }
+    return out;
+  }
+
+  function bossShoot(shape, angle, speed) {
+    const b = game.boss;
+    game.hazards.push(makeHazard({
+      type: 'shard', x: b.x + Math.cos(angle) * b.r, y: b.y + Math.sin(angle) * b.r,
+      r: shape.r, angle: angle, speed: speed, rot: shape.rot, spin: shape.spin, points: shape.points, entered: true,
+    }));
+  }
+
+  // Couronne d'éclats avec un passage (vers le joueur au moment du tir)
+  function bossRing(shapes, offset, gapJitter, speed) {
+    const b = game.boss;
+    const p = game.player;
+    const n = shapes.length;
+    const gapAngle = (p ? Math.atan2(p.y - b.y, p.x - b.x) : Math.PI / 2) + gapJitter;
+    const gapHalf = (CONFIG.BOSS_RING_GAP / 2) * (TAU / n);
+    for (let i = 0; i < n; i++) {
+      const a = offset + (i / n) * TAU;
+      if (Math.abs(angleDiff(a, gapAngle)) < gapHalf) continue;
+      bossShoot(shapes[i], a, speed);
+    }
+    addRing(b.x, b.y, b.r * 0.6, b.r * 1.6, 0.4, b.color, 3);
+  }
+
+  // Spirale : des éclats tirés l'un après l'autre en tournant (1 ou 2 bras)
+  function bossSpiral(rng, mult, arms) {
+    const b = game.boss;
+    const p = game.player;
+    const shots = arms > 1 ? 16 : 18;
+    const dir = rng.chance(0.5) ? 1 : -1;
+    const start = (p ? Math.atan2(p.y - b.y, p.x - b.x) : Math.PI / 2) + rng.range(-1, 1);
+    const shapes = bossShards(rng, shots * arms, 8, 10);
+    for (let i = 0; i < shots; i++) {
+      for (let arm = 0; arm < arms; arm++) {
+        const angle = start + dir * i * 0.42 + arm * Math.PI;
+        const shape = shapes[i * arms + arm];
+        b.queue.push({ t: i * 0.08, fire: function () { bossShoot(shape, angle, 165 * mult); } });
+      }
+    }
+  }
+
+  // Rayon tournant : il démarre à côté du joueur et balaie sa zone
+  function bossBeam(start, sweep) {
+    const b = game.boss;
+    game.beams.push({ x: b.x, y: b.y, start: start, sweep: sweep, angle: start, t: 0, fired: false });
+  }
+
+  // Les attaques des boss (tous les tirages au hasard faits ici, dans un ordre fixe)
   function bossAttack(kind) {
     const b = game.boss;
     const rng = b.rng;
     const p = game.player;
-    const mult = speedMultiplier();
+    const mult = speedMultiplier() * b.speedK;
     const toPlayer = p ? Math.atan2(p.y - b.y, p.x - b.x) : Math.PI / 2;
-    if (kind === 0) {
-      // Couronne d'éclats, avec un passage près du joueur
-      const n = CONFIG.BOSS_RING_SHARDS;
+    if (kind === 'ring' || kind === 'doubleRing') {
       const offset = rng.range(0, TAU);
-      const gapAngle = toPlayer + rng.range(-0.6, 0.6);
-      const gapHalf = (CONFIG.BOSS_RING_GAP / 2) * (TAU / n);
-      for (let i = 0; i < n; i++) {
-        const a = offset + (i / n) * TAU;
-        const r = rng.range(10, 14);
-        const rot = rng.range(0, TAU);
-        const spin = rng.range(-4, 4);
-        const points = shardShape(r, rng);
-        if (Math.abs(angleDiff(a, gapAngle)) < gapHalf) continue;
-        game.hazards.push(makeHazard({
-          type: 'shard', x: b.x + Math.cos(a) * CONFIG.BOSS_RADIUS, y: b.y + Math.sin(a) * CONFIG.BOSS_RADIUS,
-          r: r, angle: a, speed: 190 * mult, rot: rot, spin: spin, points: points, entered: true,
-        }));
+      const jitter = rng.range(-0.6, 0.6);
+      const shapes = bossShards(rng, CONFIG.BOSS_RING_SHARDS, 10, 14);
+      bossRing(shapes, offset, jitter, 190 * mult);
+      if (kind === 'doubleRing') {
+        // Deuxième couronne décalée, un peu plus tard : son passage est ailleurs
+        const offset2 = offset + Math.PI / CONFIG.BOSS_RING_SHARDS;
+        const jitter2 = rng.range(-0.6, 0.6);
+        const shapes2 = bossShards(rng, CONFIG.BOSS_RING_SHARDS, 10, 14);
+        b.queue.push({ t: 0.75, fire: function () { bossRing(shapes2, offset2, jitter2, 210 * mult); } });
       }
-    } else if (kind === 1) {
-      // Rayon tournant : il démarre à côté du joueur et balaie sa zone
+    } else if (kind === 'beam' || kind === 'twinBeam') {
       const dir = rng.chance(0.5) ? 1 : -1;
       const start = toPlayer - dir * CONFIG.BOSS_BEAM_SWEEP * 0.4;
-      game.beams.push({ x: b.x, y: b.y, start: start, sweep: dir * CONFIG.BOSS_BEAM_SWEEP, angle: start, t: 0, fired: false });
-    } else {
-      // Salve de 3 traqueurs
-      for (let i = -1; i <= 1; i++) {
-        const a = toPlayer + i * 0.5 + rng.range(-0.1, 0.1);
+      bossBeam(start, dir * CONFIG.BOSS_BEAM_SWEEP);
+      if (kind === 'twinBeam') bossBeam(start + Math.PI, dir * CONFIG.BOSS_BEAM_SWEEP); // un deuxième, à l'opposé
+    } else if (kind === 'seekers' || kind === 'swarm') {
+      // Salve de traqueurs (5 pour l'Hydre)
+      const n = kind === 'swarm' ? 5 : 3;
+      for (let i = 0; i < n; i++) {
+        const a = toPlayer + (i - (n - 1) / 2) * (n > 3 ? 0.38 : 0.5) + rng.range(-0.1, 0.1);
         game.hazards.push(makeHazard({
-          type: 'seeker', x: b.x + Math.cos(a) * CONFIG.BOSS_RADIUS, y: b.y + Math.sin(a) * CONFIG.BOSS_RADIUS,
+          type: 'seeker', x: b.x + Math.cos(a) * b.r, y: b.y + Math.sin(a) * b.r,
           r: CONFIG.SEEKER_RADIUS, angle: a, speed: CONFIG.SEEKER_SPEED * 1.2 * mult, entered: true, homing: 2.5,
         }));
+      }
+    } else if (kind === 'spiral' || kind === 'doubleSpiral') {
+      bossSpiral(rng, mult, kind === 'doubleSpiral' ? 2 : 1);
+    } else if (kind === 'lasers') {
+      // Deux lasers en croix sur le joueur
+      const jx = rng.range(-60, 60);
+      const jy = rng.range(-60, 60);
+      if (p) {
+        addLaser(true, p.y + jy);
+        addLaser(false, p.x + jx);
+        Sound.laserWarn();
+      }
+    } else if (kind === 'mines') {
+      // Trois mines autour du joueur
+      const base = rng.range(0, TAU);
+      if (p) {
+        for (let i = 0; i < 3; i++) {
+          const a = base + (i / 3) * TAU;
+          const x = clamp(p.x + Math.cos(a) * 190, 30, view.W - 30);
+          const y = clamp(p.y + Math.sin(a) * 190, 30, view.H - 30);
+          game.mines.push({ x: x, y: y, t: 0, exploded: false, ring: 0, beep: 0 });
+        }
+      }
+    } else if (kind === 'wall') {
+      spawnWall(rng);
+    } else if (kind === 'hole') {
+      spawnHole(rng);
+    } else if (kind === 'charge') {
+      // Il vise le joueur, puis fonce (une ligne montre où il va)
+      if (p) {
+        b.charge = {
+          phase: 'aim', t: 0, fromX: b.x, fromY: b.y,
+          toX: clamp(p.x, b.r, view.W - b.r), toY: clamp(p.y, b.r, view.H - b.r),
+        };
+        Sound.bossCharge();
       }
     }
   }
@@ -4086,21 +4295,26 @@
     const b = game.boss;
     b.phase = 'leave';
     b.glow = 0;
+    b.queue.length = 0;
+    b.charge = null;
+    b.leaveY = b.y;
     game.beams.length = 0;
-    const bonus = Math.round(CONFIG.BOSS_BONUS * game.level * pointsMult());
+    // Les boss suivants rapportent plus
+    const bonus = Math.round(CONFIG.BOSS_BONUS * game.level * pointsMult() * (1 + 0.25 * b.index));
     game.score += bonus;
     game.stats.bosses++;
-    const colors = [COLORS.boss, COLORS.bossCore, COLORS.energy, COLORS.shield, COLORS.slow, shipColor(), COLORS.white];
+    const colors = [b.color, b.core, COLORS.energy, COLORS.shield, COLORS.slow, shipColor(), COLORS.white];
     burst(b.x, b.y, { count: 140, colors: colors, speed: [120, 620], life: [0.6, 1.6], size: [2, 6], drag: 1.8 });
-    addRing(b.x, b.y, 20, 320, 1.0, COLORS.bossCore, 5);
+    addRing(b.x, b.y, 20, 320, 1.0, b.core, 5);
     addRing(b.x, b.y, 20, 440, 1.3, COLORS.white, 2);
     game.shake = Math.max(game.shake, reducedFx() ? 3 : 14);
     game.flash = Math.max(game.flash, reducedFx() ? 0.15 : 0.5);
     removeDead(game.texts, function (t) { return t.tag !== 'level'; });
-    addText(view.W / 2, view.H * 0.46, 'NOYAU VAINCU !', COLORS.bossCore, 40, 2.2, -10, 'level');
+    addText(view.W / 2, view.H * 0.46, b.name.toUpperCase() + ' VAINCU !', b.core, 38, 2.2, -10, 'level');
     addText(view.W / 2, view.H * 0.46 + 46, '+' + formatScore(bonus), COLORS.energy, 26, 2.2, -10, 'level');
     Sound.bossWin();
     unlockAchievement('chasseur-boss');
+    if (b.index === BOSSES.length - 1) unlockAchievement('neant');
   }
 
   // --- Bonus temporaires (bouclier, ralenti, aimant) ---
@@ -4418,7 +4632,7 @@
 
     // Boss : son corps et ses rayons tournants
     const b = game.boss;
-    if (b.active && b.phase !== 'leave' && Math.hypot(p.x - b.x, p.y - b.y) < CONFIG.BOSS_RADIUS * 0.8 + pr) {
+    if (b.active && b.phase !== 'leave' && Math.hypot(p.x - b.x, p.y - b.y) < b.r * 0.8 + pr) {
       hitPlayer(p.x, p.y, null);
       return;
     }
@@ -4472,7 +4686,8 @@
       game.turretTimer = 2;
     }
     if (game.level % CONFIG.BOSS_EVERY === 0 && !game.boss.active) {
-      announce('ALERTE : un boss arrive ! Survis 20 s', COLORS.boss);
+      const next = bossInfo(game.boss.number + 1);
+      announce('ALERTE : ' + next.name.toUpperCase() + ' arrive ! Survis ' + next.duration + ' s', next.def.color);
       startBoss();
     }
     Sound.levelUp();
@@ -4520,7 +4735,9 @@
           game.rushTimer = CONFIG.BOSSRUSH_PAUSE;
           game.level = CONFIG.BOSS_EVERY * (game.boss.number + 1);
           removeDead(game.texts, function (t) { return t.tag !== 'level'; });
-          addText(view.W / 2, view.H * 0.5, 'BOSS ' + (game.boss.number + 1), COLORS.boss, 44, 1.8, -10, 'level');
+          const next = bossInfo(game.boss.number + 1);
+          addText(view.W / 2, view.H * 0.5, 'BOSS ' + (game.boss.number + 1), next.def.color, 44, 1.8, -10, 'level');
+          addText(view.W / 2, view.H * 0.5 + 44, next.name.toUpperCase() + ' · ' + next.duration + ' s', next.def.core, 24, 1.8, -10, 'level');
           Sound.levelUp();
           startBoss();
         }
@@ -5369,6 +5586,8 @@
   // Rayons tournants du boss
   function drawBeams() {
     const len = 2600;
+    const color = game.boss.color || COLORS.boss;
+    const start = game.boss.r || CONFIG.BOSS_RADIUS;
     for (const bm of game.beams) {
       ctx.save();
       ctx.translate(bm.x, bm.y);
@@ -5378,16 +5597,16 @@
         const k = bm.t / CONFIG.BOSS_BEAM_WARNING;
         ctx.globalAlpha = 0.35 + 0.5 * Math.abs(Math.sin(bm.t * (10 + 20 * k)));
         ctx.setLineDash([16, 10]);
-        ctx.strokeStyle = COLORS.boss;
+        ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(CONFIG.BOSS_RADIUS, 0);
+        ctx.moveTo(start, 0);
         ctx.lineTo(len, 0);
         ctx.stroke();
         ctx.setLineDash([]);
         // Flèches qui montrent le sens de rotation
         const side = bm.sweep > 0 ? 1 : -1;
-        ctx.fillStyle = COLORS.boss;
+        ctx.fillStyle = color;
         for (let d = 160; d < 700; d += 180) {
           ctx.beginPath();
           ctx.moveTo(d, side * 22);
@@ -5401,9 +5620,9 @@
         const alpha = ft < CONFIG.BOSS_BEAM_ACTIVE ? 1 : 1 - (ft - CONFIG.BOSS_BEAM_ACTIVE) / 0.25;
         const w = CONFIG.BOSS_BEAM_WIDTH;
         ctx.globalAlpha = clamp(alpha, 0, 1);
-        ctx.shadowColor = COLORS.boss;
+        ctx.shadowColor = color;
         ctx.shadowBlur = glow(24);
-        ctx.fillStyle = COLORS.boss;
+        ctx.fillStyle = color;
         ctx.fillRect(0, -w / 2, len, w);
         ctx.shadowBlur = 0;
         ctx.fillStyle = COLORS.laserCore;
@@ -5413,59 +5632,114 @@
     }
   }
 
-  // Boss : octogone qui tourne, cœur qui pulse, s'illumine avant d'attaquer
+  // Boss : polygone qui tourne (forme et couleurs selon le boss), cœur qui pulse,
+  // s'illumine avant d'attaquer. La charge est annoncée par une ligne pointillée.
   function drawBoss() {
     const b = game.boss;
     if (!b.active) return;
-    const R = CONFIG.BOSS_RADIUS;
+    const R = b.r;
+    const baseAlpha = clamp(b.alpha === undefined ? 1 : b.alpha, 0, 1);
+
+    // Charge : ligne et cible là où il va foncer
+    if (b.charge && b.charge.phase === 'aim') {
+      const c = b.charge;
+      const blink = 0.4 + 0.6 * Math.abs(Math.sin(c.t * 14));
+      ctx.save();
+      ctx.globalAlpha = blink;
+      ctx.strokeStyle = b.color;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([14, 10]);
+      ctx.beginPath();
+      ctx.moveTo(c.fromX, c.fromY);
+      ctx.lineTo(c.toX, c.toY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(c.toX, c.toY, R * 0.9, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.translate(b.x, b.y);
-    ctx.globalAlpha = clamp(b.alpha === undefined ? 1 : b.alpha, 0, 1);
+    ctx.globalAlpha = baseAlpha;
     // Halo d'alerte avant une attaque
     if (b.glow > 0) {
-      ctx.globalAlpha *= 0.25 + 0.5 * b.glow;
-      ctx.fillStyle = COLORS.bossCore;
+      ctx.globalAlpha = baseAlpha * (0.25 + 0.5 * b.glow);
+      ctx.fillStyle = b.core;
       ctx.beginPath();
       ctx.arc(0, 0, R * (1.15 + 0.35 * b.glow), 0, TAU);
       ctx.fill();
-      ctx.globalAlpha = clamp(b.alpha === undefined ? 1 : b.alpha, 0, 1);
+      ctx.globalAlpha = baseAlpha;
     }
     ctx.rotate(b.rot);
-    ctx.shadowColor = COLORS.boss;
+    ctx.shadowColor = b.color;
     ctx.shadowBlur = glow(26);
-    ctx.fillStyle = 'rgba(40, 4, 20, 0.85)';
-    ctx.strokeStyle = COLORS.boss;
-    ctx.lineWidth = 4;
+    ctx.fillStyle = 'rgba(30, 4, 24, 0.88)';
+    ctx.strokeStyle = b.color;
+    ctx.lineWidth = b.index === 3 ? 6 : 4;
     ctx.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * TAU;
-      if (i === 0) ctx.moveTo(Math.cos(a) * R, Math.sin(a) * R);
-      else ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R);
+    for (let i = 0; i < b.sides; i++) {
+      const a = (i / b.sides) * TAU;
+      // Néant : bord en étoile ; Hydre : triangle aux sommets arrondis
+      const rr = b.index === 4 && i % 2 === 1 ? R * 0.7 : R;
+      if (i === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
     }
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
-    // Triangle intérieur qui tourne dans l'autre sens
+
+    // Décor intérieur, qui tourne dans l'autre sens
     ctx.rotate(-b.rot * 2.2);
-    ctx.strokeStyle = COLORS.bossCore;
+    ctx.strokeStyle = b.core;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * TAU;
-      if (i === 0) ctx.moveTo(Math.cos(a) * R * 0.62, Math.sin(a) * R * 0.62);
-      else ctx.lineTo(Math.cos(a) * R * 0.62, Math.sin(a) * R * 0.62);
+    if (b.index === 1) {
+      // Sentinelle : un œil
+      ctx.ellipse(0, 0, R * 0.62, R * 0.32, 0, 0, TAU);
+    } else if (b.index === 2) {
+      // Hydre : trois têtes
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * TAU;
+        ctx.moveTo(Math.cos(a) * R * 0.62 + R * 0.16, Math.sin(a) * R * 0.62);
+        ctx.arc(Math.cos(a) * R * 0.62, Math.sin(a) * R * 0.62, R * 0.16, 0, TAU);
+      }
+    } else if (b.index === 3) {
+      // Titan : carré épais
+      ctx.lineWidth = 5;
+      ctx.rect(-R * 0.45, -R * 0.45, R * 0.9, R * 0.9);
+    } else if (b.index === 4) {
+      // Néant : spirale
+      for (let i = 0; i < 3; i++) {
+        ctx.moveTo(Math.cos(i * TAU / 3) * R * 0.25, Math.sin(i * TAU / 3) * R * 0.25);
+        ctx.arc(0, 0, R * 0.55, i * TAU / 3, i * TAU / 3 + 1.4);
+      }
+    } else {
+      // Noyau : triangle
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * TAU;
+        if (i === 0) ctx.moveTo(Math.cos(a) * R * 0.62, Math.sin(a) * R * 0.62);
+        else ctx.lineTo(Math.cos(a) * R * 0.62, Math.sin(a) * R * 0.62);
+      }
+      ctx.closePath();
     }
-    ctx.closePath();
     ctx.stroke();
-    // Cœur
+
+    // Cœur (sombre pour le Néant)
     const pulse = 1 + 0.12 * Math.sin(game.bgTime * 6) + 0.25 * b.glow;
-    ctx.fillStyle = COLORS.bossCore;
-    ctx.shadowColor = COLORS.bossCore;
+    ctx.fillStyle = b.index === 4 ? '#05010f' : b.core;
+    ctx.shadowColor = b.index === 4 ? b.color : b.core;
     ctx.shadowBlur = glow(20);
     ctx.beginPath();
     ctx.arc(0, 0, R * 0.24 * pulse, 0, TAU);
     ctx.fill();
+    if (b.index === 4) {
+      ctx.strokeStyle = b.core;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
