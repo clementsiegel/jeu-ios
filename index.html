@@ -19,6 +19,7 @@
        est en ligne (sinon le navigateur affiche une erreur en double-clic). -->
 
   <title>Éclats Néon</title>
+  <link rel="preload" href="fonts/bungee.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -79,85 +80,100 @@
 
 
     <!-- ===== Écran d'accueil ===== -->
-    <section id="screen-menu" class="screen" aria-labelledby="menu-title">
+    <section id="screen-menu" class="screen screen-menu" aria-labelledby="menu-title">
       <div class="panel">
-        <h1 id="menu-title" class="title">ÉCLATS <span>NÉON</span></h1>
-        <p class="tagline">Esquive les éclats, attrape l'énergie et survis le plus longtemps possible.</p>
+        <header class="logo">
+          <h1 id="menu-title" class="logo-title"><span class="logo-a">Éclats</span><span class="logo-b">Néon</span></h1>
+          <p class="tagline">Esquive, frôle, ramasse l'énergie. Tiens le plus longtemps possible.</p>
+        </header>
 
-        <div class="menu-actions">
-          <button type="button" id="btn-play" class="btn btn-primary">Jouer</button>
-          <button type="button" id="btn-modes" class="btn btn-daily">Modes</button>
-          <button type="button" id="btn-leaderboard" class="btn btn-board">Classement</button>
-          <button type="button" id="btn-ships" class="btn">Vaisseaux</button>
-          <button type="button" id="btn-achievements" class="btn">Succès</button>
-          <button type="button" id="btn-settings" class="btn">Réglages</button>
+        <button type="button" id="btn-play" class="btn btn-primary btn-play">Jouer</button>
+
+        <nav class="menu-list" aria-label="Menu principal">
+          <button type="button" id="btn-modes" class="menu-row" style="--row: var(--yellow)">
+            <span class="menu-row-name">Modes</span><span class="menu-row-info">7 modes</span>
+          </button>
+          <button type="button" id="btn-leaderboard" class="menu-row" style="--row: var(--pink)">
+            <span class="menu-row-name">Classement</span><span class="menu-row-info">en ligne</span>
+          </button>
+          <button type="button" id="btn-ships" class="menu-row" style="--row: var(--cyan)">
+            <span class="menu-row-name">Vaisseaux</span><span class="menu-row-info" id="menu-info-ships"></span>
+          </button>
+          <button type="button" id="btn-achievements" class="menu-row" style="--row: var(--green)">
+            <span class="menu-row-name">Succès</span><span class="menu-row-info" id="menu-info-ach"></span>
+          </button>
+          <button type="button" id="btn-settings" class="menu-row" style="--row: var(--muted)">
+            <span class="menu-row-name">Réglages</span><span class="menu-row-info"></span>
+          </button>
+        </nav>
+
+        <div class="scoreboard">
+          <div><span class="sb-label">Record</span><strong id="menu-best">0</strong></div>
+          <div><span class="sb-label">Défi du jour</span><strong id="menu-daily" class="daily-best">0</strong></div>
         </div>
-        <p class="best-line">Record : <strong id="menu-best">0</strong> · Défi du jour : <strong id="menu-daily" class="daily-best">0</strong></p>
 
         <!-- Missions du jour (remplies par game.js) -->
-        <div class="missions">
+        <section class="missions" aria-labelledby="missions-title">
           <div class="missions-head">
-            <h2>Missions du jour</h2>
+            <h2 id="missions-title">Missions du jour</h2>
             <span id="streak" class="streak"></span>
           </div>
           <ul id="mission-list" class="mission-list"></ul>
-        </div>
+        </section>
 
-        <div class="cards">
-          <div class="card">
-            <h2>Commandes</h2>
-            <div class="ctrl-row">
-              <span class="keys"><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> ou <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>
-              <span class="action">Se déplacer</span>
+        <details class="howto">
+          <summary>Comment jouer</summary>
+          <div class="howto-body">
+            <div>
+              <h3>Commandes</h3>
+              <div class="ctrl-row">
+                <span class="keys">Pose le pouce n'importe où et pousse</span>
+                <span class="action">Se déplacer</span>
+              </div>
+              <div class="ctrl-row">
+                <span class="keys">Tape l'écran, ou un 2ᵉ doigt</span>
+                <span class="action">Dash (invincible un instant)</span>
+              </div>
+              <div class="ctrl-row">
+                <span class="keys"><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> ou <kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd>, ou clic gauche maintenu</span>
+                <span class="action">Se déplacer (clavier, souris)</span>
+              </div>
+              <div class="ctrl-row">
+                <span class="keys"><kbd>Espace</kbd> <kbd>Maj</kbd> ou clic droit</span>
+                <span class="action">Dash</span>
+              </div>
+              <div class="ctrl-row">
+                <span class="keys"><kbd>Échap</kbd> <kbd>P</kbd> · <kbd>M</kbd></span>
+                <span class="action">Pause · son</span>
+              </div>
             </div>
-            <div class="ctrl-row">
-              <span class="keys">Maintenir le clic gauche</span>
-              <span class="action">Se déplacer à la souris</span>
-            </div>
-            <div class="ctrl-row">
-              <span class="keys">Joystick : pose le pouce n'importe où et pousse</span>
-              <span class="action">Se déplacer sur mobile</span>
-            </div>
-            <div class="ctrl-row">
-              <span class="keys"><kbd>Espace</kbd> ou <kbd>Maj</kbd> · clic droit · tape l'écran · 2ᵉ doigt</span>
-              <span class="action">Dash : invincible un court instant</span>
-            </div>
-            <div class="ctrl-row">
-              <span class="keys"><kbd>Échap</kbd> ou <kbd>P</kbd></span>
-              <span class="action">Pause</span>
-            </div>
-            <div class="ctrl-row">
-              <span class="keys"><kbd>M</kbd></span>
-              <span class="action">Couper / remettre le son</span>
+            <div>
+              <h3>Dangers et bonus</h3>
+              <ul class="legend">
+                <li><i class="dot dot-shard"></i><span><b>Éclats</b> : à éviter. Les gros se divisent (niv. 5)</span></li>
+                <li><i class="dot dot-seeker"></i><span><b>Traqueurs</b> : ils te suivent (niv. 3)</span></li>
+                <li><i class="dot dot-laser"></i><span><b>Lasers</b> : quitte la zone avant le tir (niv. 4)</span></li>
+                <li><i class="dot dot-mine"></i><span><b>Mines</b> : explosent en anneau (niv. 6)</span></li>
+                <li><i class="dot dot-bouncer"></i><span><b>Rebondisseurs</b> : rebondissent sur les bords (niv. 7)</span></li>
+                <li><i class="dot dot-hole"></i><span><b>Trous noirs</b> : ils t'attirent (niv. 8)</span></li>
+                <li><i class="dot dot-wall"></i><span><b>Murs</b> : passe par le trou (niv. 9)</span></li>
+                <li><i class="dot dot-turret"></i><span><b>Tourelles</b> : elles te visent (niv. 11)</span></li>
+                <li><i class="dot dot-boss"></i><span><b>Boss</b> : tous les 5 niveaux, 5 boss de plus en plus durs</span></li>
+                <li><i class="dot dot-energy"></i><span><b>Énergie</b> : +100 points et dash rechargé</span></li>
+                <li><i class="dot dot-power"></i><span><b>Bonus</b> : <span class="c-shield">bouclier</span>, <span class="c-slow">ralenti</span>, <span class="c-magnet">aimant</span>, <span class="c-mini">mini</span>, <span class="c-double">score x2</span>, <span class="c-bomb">bombe</span></span></li>
+                <li><i class="dot dot-combo"></i><span><b>Combo</b> : frôle les éclats et enchaîne, jusqu'à x5</span></li>
+              </ul>
             </div>
           </div>
-
-          <div class="card">
-            <h2>À savoir</h2>
-            <ul class="legend">
-              <li><i class="dot dot-shard"></i><span><b>Éclats</b> : à éviter (les gros se divisent, niv. 5)</span></li>
-              <li><i class="dot dot-seeker"></i><span><b>Traqueurs</b> : ils te suivent (niv. 3)</span></li>
-              <li><i class="dot dot-laser"></i><span><b>Lasers</b> : quitte la zone avant le tir (niv. 4)</span></li>
-              <li><i class="dot dot-mine"></i><span><b>Mines</b> : explosent en anneau (niv. 6)</span></li>
-              <li><i class="dot dot-bouncer"></i><span><b>Rebondisseurs</b> : rebondissent sur les bords (niv. 7)</span></li>
-              <li><i class="dot dot-hole"></i><span><b>Trous noirs</b> : ils t'attirent (niv. 8)</span></li>
-              <li><i class="dot dot-wall"></i><span><b>Murs</b> : passe par le trou (niv. 9)</span></li>
-              <li><i class="dot dot-turret"></i><span><b>Tourelles</b> : elles te visent (niv. 11)</span></li>
-              <li><i class="dot dot-boss"></i><span><b>Boss</b> : tous les 5 niveaux, 5 boss de plus en plus durs</span></li>
-              <li><i class="dot dot-energy"></i><span><b>Énergie</b> : +100 points et dash rechargé</span></li>
-              <li><i class="dot dot-power"></i><span><b>Bonus</b> : <span class="c-shield">bouclier</span>, <span class="c-slow">ralenti</span>, <span class="c-magnet">aimant</span>, <span class="c-mini">mini</span>, <span class="c-double">score x2</span> ou <span class="c-bomb">bombe</span></span></li>
-              <li><i class="dot dot-combo"></i><span><b>Combo</b> : frôle les éclats et enchaîne, jusqu'à x5</span></li>
-            </ul>
-          </div>
-        </div>
+        </details>
       </div>
     </section>
 
     <!-- ===== Écran de pause ===== -->
-    <section id="screen-pause" class="screen" aria-labelledby="pause-title">
+    <section id="screen-pause" class="screen screen-center" aria-labelledby="pause-title">
       <div class="panel panel-small">
-        <h2 id="pause-title" class="screen-title pause-title">PAUSE</h2>
-        <p class="hint">Appuie sur <kbd>Échap</kbd> ou <kbd>P</kbd> pour reprendre.</p>
+        <h2 id="pause-title" class="screen-title pause-title">Pause</h2>
+        <p class="hint">Échap ou P pour reprendre.</p>
         <div class="btn-row">
           <button type="button" id="btn-resume" class="btn btn-primary">Reprendre</button>
           <button type="button" id="btn-quit" class="btn">Menu principal</button>
@@ -166,21 +182,22 @@
     </section>
 
     <!-- ===== Écran de fin de partie ===== -->
-    <section id="screen-gameover" class="screen" aria-labelledby="go-title">
+    <section id="screen-gameover" class="screen screen-center" aria-labelledby="go-title">
       <div class="panel panel-small">
         <p id="go-mode" class="mode-tag hidden">Défi du jour</p>
-        <h2 id="go-title" class="screen-title gameover-title">PARTIE TERMINÉE</h2>
-        <div class="badges">
-          <p id="go-record" class="record-badge hidden">Nouveau record !</p>
-          <p id="go-unlock" class="unlock-badge hidden"></p>
-          <p id="go-ach" class="ach-badge hidden"></p>
-          <p id="go-missions" class="ach-badge mission-badge hidden"></p>
-          <p id="go-streak" class="ach-badge streak-badge hidden"></p>
-        </div>
+        <h2 id="go-title" class="screen-title gameover-title">Partie terminée</h2>
 
         <div class="final-score">
           <span class="final-label">Score</span>
           <span id="go-score" class="final-value">0</span>
+        </div>
+
+        <div class="badges">
+          <p id="go-record" class="badge record-badge hidden">Nouveau record !</p>
+          <p id="go-unlock" class="badge unlock-badge hidden"></p>
+          <p id="go-ach" class="badge ach-badge hidden"></p>
+          <p id="go-missions" class="badge mission-badge hidden"></p>
+          <p id="go-streak" class="badge streak-badge hidden"></p>
         </div>
 
         <!-- Classement en ligne : place obtenue, ou choix du pseudo (rempli par game.js) -->
@@ -214,71 +231,71 @@
         <div class="btn-row">
           <button type="button" id="btn-replay" class="btn btn-primary">Rejouer</button>
           <button type="button" id="btn-share" class="btn">Partager</button>
-          <button type="button" id="btn-menu" class="btn">Menu principal</button>
+          <button type="button" id="btn-menu" class="btn">Menu</button>
         </div>
-        <p class="hint">Appuie sur <kbd>Entrée</kbd> pour rejouer.</p>
+        <p class="hint hide-touch">Entrée pour rejouer.</p>
       </div>
     </section>
 
     <!-- ===== Écran des vaisseaux ===== -->
     <section id="screen-hangar" class="screen" aria-labelledby="hangar-title">
       <div class="panel panel-small">
-        <h2 id="hangar-title" class="screen-title hangar-title">VAISSEAUX</h2>
-        <p class="hint">Points cumulés : <strong id="hangar-points" class="points-value">0</strong></p>
-        <p class="hint hint-small">Chaque partie ajoute son score aux points cumulés. Chaque vaisseau a sa spécialité ; les plus rares demandent aussi un exploit (★). Touche un vaisseau pour voir sa fiche.</p>
+        <div class="screen-head">
+          <button type="button" id="btn-hangar-back" class="back-btn">Retour</button>
+          <h2 id="hangar-title" class="screen-title" style="--title: var(--cyan)">Vaisseaux</h2>
+        </div>
+        <p class="lead">Points cumulés <strong id="hangar-points" class="points-value">0</strong></p>
+        <p class="hint">Chaque partie ajoute son score aux points cumulés. Les vaisseaux rares demandent aussi un exploit. Touche un vaisseau pour voir sa fiche.</p>
         <div id="ships" class="ships"></div>
         <div id="ship-info" class="ship-info" aria-live="polite"></div>
         <h3 class="sub-title">Fonds d'écran</h3>
         <div id="themes" class="themes"></div>
-        <div class="btn-row">
-          <button type="button" id="btn-hangar-back" class="btn">Retour</button>
-        </div>
       </div>
     </section>
 
     <!-- ===== Écran des modes ===== -->
     <section id="screen-modes" class="screen" aria-labelledby="modes-title">
       <div class="panel panel-small">
-        <h2 id="modes-title" class="screen-title hangar-title">MODES</h2>
+        <div class="screen-head">
+          <button type="button" id="btn-modes-back" class="back-btn">Retour</button>
+          <h2 id="modes-title" class="screen-title" style="--title: var(--yellow)">Modes</h2>
+        </div>
         <div class="modes">
-          <button type="button" id="btn-mode-normal" class="mode-card">
+          <button type="button" id="btn-mode-normal" class="mode-card" style="--mode: var(--cyan)">
             <span class="mode-name">Normal</span>
             <span class="mode-desc">Survis le plus longtemps possible. Un boss tous les 5 niveaux.</span>
-            <span class="mode-best">Record : <b id="mode-best-normal">0</b></span>
+            <span class="mode-best">Record <b id="mode-best-normal">0</b></span>
           </button>
-          <button type="button" id="btn-daily" class="mode-card mode-daily">
+          <button type="button" id="btn-daily" class="mode-card" style="--mode: var(--yellow)">
             <span class="mode-name">Défi du jour</span>
             <span class="mode-desc">Les mêmes vagues pour tout le monde aujourd'hui.</span>
-            <span class="mode-best">Record du jour : <b id="mode-best-daily">0</b></span>
+            <span class="mode-best">Record du jour <b id="mode-best-daily">0</b></span>
           </button>
-          <button type="button" id="btn-mode-timeattack" class="mode-card mode-timeattack">
+          <button type="button" id="btn-mode-timeattack" class="mode-card" style="--mode: var(--pink)">
             <span class="mode-name">Contre-la-montre</span>
             <span class="mode-desc">60 secondes pour faire le meilleur score. Un niveau toutes les 8 s.</span>
-            <span class="mode-best">Record : <b id="mode-best-timeattack">0</b></span>
+            <span class="mode-best">Record <b id="mode-best-timeattack">0</b></span>
           </button>
-          <button type="button" id="btn-mode-bossrush" class="mode-card mode-bossrush">
+          <button type="button" id="btn-mode-bossrush" class="mode-card" style="--mode: #ff8fbd">
             <span class="mode-name">Boss Rush</span>
             <span class="mode-desc">Les 5 boss l'un après l'autre, puis leurs versions II, III… de plus en plus dures.</span>
-            <span class="mode-best">Record : <b id="mode-best-bossrush">0</b></span>
+            <span class="mode-best">Record <b id="mode-best-bossrush">0</b></span>
           </button>
-          <button type="button" id="btn-mode-extreme" class="mode-card mode-extreme">
+          <button type="button" id="btn-mode-extreme" class="mode-card" style="--mode: var(--orange)">
             <span class="mode-name">Extrême</span>
             <span class="mode-desc">Combo jusqu'à x10, mais aucun bonus et des dangers plus rapides.</span>
-            <span class="mode-best">Record : <b id="mode-best-extreme">0</b></span>
+            <span class="mode-best">Record <b id="mode-best-extreme">0</b></span>
           </button>
-          <button type="button" id="btn-mode-chaos" class="mode-card mode-chaos">
+          <button type="button" id="btn-mode-chaos" class="mode-card" style="--mode: var(--violet)">
             <span class="mode-name">Chaos</span>
             <span class="mode-desc">Tout va plus vite : les dangers arrivent deux fois plus tôt, un niveau toutes les 10 s.</span>
-            <span class="mode-best">Record : <b id="mode-best-chaos">0</b></span>
+            <span class="mode-best">Record <b id="mode-best-chaos">0</b></span>
           </button>
-          <button type="button" id="btn-mode-zen" class="mode-card mode-zen">
+          <button type="button" id="btn-mode-zen" class="mode-card" style="--mode: var(--green)">
             <span class="mode-name">Zen</span>
             <span class="mode-desc">Pas de mort : un coup te coûte ton combo et 100 points. Pour s'entraîner.</span>
             <span class="mode-best">Sans record ni points</span>
           </button>
-        </div>
-        <div class="btn-row">
-          <button type="button" id="btn-modes-back" class="btn">Retour</button>
         </div>
       </div>
     </section>
@@ -286,27 +303,31 @@
     <!-- ===== Écran des succès ===== -->
     <section id="screen-achievements" class="screen" aria-labelledby="ach-title">
       <div class="panel panel-small">
-        <h2 id="ach-title" class="screen-title hangar-title">SUCCÈS</h2>
-        <p class="hint"><strong id="ach-count" class="points-value">0/12</strong> débloqués · chaque succès rapporte des points cumulés</p>
+        <div class="screen-head">
+          <button type="button" id="btn-ach-back" class="back-btn">Retour</button>
+          <h2 id="ach-title" class="screen-title" style="--title: var(--green)">Succès</h2>
+        </div>
+        <p class="lead"><strong id="ach-count" class="points-value">0/12</strong> débloqués</p>
+        <p class="hint">Chaque succès rapporte des points cumulés.</p>
         <div id="achievements" class="achievements"></div>
         <h3 class="sub-title">Statistiques</h3>
         <div id="stats-grid" class="stats stats-grid"></div>
-        <div class="btn-row">
-          <button type="button" id="btn-ach-back" class="btn">Retour</button>
-        </div>
       </div>
     </section>
 
     <!-- ===== Écran du classement en ligne ===== -->
     <section id="screen-leaderboard" class="screen" aria-labelledby="lb-title">
       <div class="panel panel-small">
-        <h2 id="lb-title" class="screen-title board-title">CLASSEMENT</h2>
+        <div class="screen-head">
+          <button type="button" id="btn-lb-back" class="back-btn">Retour</button>
+          <h2 id="lb-title" class="screen-title" style="--title: var(--pink)">Classement</h2>
+        </div>
         <div class="segmented lb-tabs" id="lb-tabs" role="group" aria-label="Mode de jeu">
           <button type="button" data-mode="normal">Normal</button>
           <button type="button" data-mode="daily">Défi du jour</button>
           <button type="button" data-mode="timeattack">60 s</button>
         </div>
-        <p id="lb-sub" class="hint hint-small"></p>
+        <p id="lb-sub" class="hint"></p>
         <div id="lb-me" class="lb-me">
           <p id="lb-me-line" class="lb-me-line">Ton pseudo : <b id="lb-me-name"></b>
             <button type="button" id="btn-lb-rename" class="link-btn">Changer</button></p>
@@ -321,36 +342,36 @@
         </div>
         <ol id="lb-list" class="lb-list"></ol>
         <p id="lb-status" class="hint"></p>
-        <div class="btn-row">
-          <button type="button" id="btn-lb-back" class="btn">Retour</button>
-        </div>
       </div>
     </section>
 
     <!-- ===== Écran des réglages ===== -->
     <section id="screen-settings" class="screen" aria-labelledby="settings-title">
       <div class="panel panel-small">
-        <h2 id="settings-title" class="screen-title hangar-title">RÉGLAGES</h2>
+        <div class="screen-head">
+          <button type="button" id="btn-settings-back" class="back-btn">Retour</button>
+          <h2 id="settings-title" class="screen-title" style="--title: var(--text)">Réglages</h2>
+        </div>
         <div class="settings">
           <label class="setting">
-            <span class="setting-name">Volume de la musique</span>
+            <span class="setting-name">Musique</span>
             <input type="range" id="set-music" min="0" max="100" step="5">
             <output id="set-music-val">60</output>
           </label>
           <label class="setting">
-            <span class="setting-name">Volume des effets</span>
+            <span class="setting-name">Effets sonores</span>
             <input type="range" id="set-sfx" min="0" max="100" step="5">
             <output id="set-sfx-val">100</output>
           </label>
-          <div class="setting">
-            <span class="setting-name">Difficulté <small>Facile : moins de points · Difficile : plus de points. Le défi du jour reste en Normal.</small></span>
+          <div class="setting setting-stack">
+            <span class="setting-name">Difficulté <small>Facile rapporte moins de points, Difficile en rapporte plus. Le défi du jour reste en Normal.</small></span>
             <div class="segmented" id="set-difficulty" role="group" aria-label="Difficulté">
               <button type="button" data-diff="easy">Facile</button>
               <button type="button" data-diff="normal">Normal</button>
               <button type="button" data-diff="hard">Difficile</button>
             </div>
           </div>
-          <div class="setting">
+          <div class="setting setting-stack">
             <span class="setting-name">Taille du joystick</span>
             <div class="segmented" id="set-joystick" role="group" aria-label="Taille du joystick">
               <button type="button" data-size="small">Petit</button>
@@ -359,18 +380,15 @@
             </div>
           </div>
           <label class="setting setting-check">
-            <span class="setting-name">Réduire les effets <small>(tremblements, flashs, particules)</small></span>
+            <span class="setting-name">Réduire les effets <small>Tremblements, flashs, particules</small></span>
             <input type="checkbox" id="set-reduce">
           </label>
           <div class="setting">
             <span class="setting-name">Tutoriel</span>
-            <button type="button" id="btn-tuto-again" class="btn btn-small">Revoir le tutoriel</button>
+            <button type="button" id="btn-tuto-again" class="btn btn-small">Revoir</button>
           </div>
         </div>
-        <div class="btn-row">
-          <button type="button" id="btn-settings-back" class="btn">Retour</button>
-        </div>
-        <p class="version-line">Éclats Néon · version <span id="game-version">2.0.1</span></p>
+        <p class="version-line">Éclats Néon · version <span id="game-version">2.1</span></p>
       </div>
     </section>
 

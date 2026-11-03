@@ -29,7 +29,7 @@
   // Version du jeu, affichée dans les Réglages. À augmenter à chaque mise à jour :
   // grosse mise à jour 1.8 -> 1.9, petite correction 1.8 -> 1.81 -> 1.82.
   // Penser à mettre la même dans VERSION, en haut de sw.js (mode hors ligne).
-  const GAME_VERSION = '2.0.1';
+  const GAME_VERSION = '2.1';
 
   // --- Classement en ligne (Supabase) ---
   // Les 2 codes se trouvent dans Supabase, bouton "Connect" du projet
@@ -322,7 +322,8 @@
     white: '#ffffff',
   };
 
-  const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+  // Police des textes du jeu : la même que l'interface (fonts/bungee.woff2)
+  const FONT = '"Bungee", "Arial Black", system-ui, sans-serif';
   const TAU = Math.PI * 2;
   const REDUCED_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -1278,25 +1279,25 @@
 
   // stat + target : succès à compteur (une barre de progression est affichée)
   const ACHIEVEMENTS = [
-    { id: 'premier-vol', icon: '🚀', name: 'Premier vol', desc: 'Termine ta première partie.', points: 100 },
-    { id: 'survivant', icon: '⏱️', name: 'Survivant', desc: 'Survis 2 minutes en une partie.', points: 300, stat: 'time', target: 120 },
-    { id: 'funambule', icon: '🎯', name: 'Funambule', desc: 'Frôle 10 éclats en une partie.', points: 200, stat: 'grazes', target: 10 },
-    { id: 'combo-parfait', icon: '🔥', name: 'Combo parfait', desc: 'Atteins le combo x5.', points: 300, stat: 'combo', target: 5 },
-    { id: 'collectionneur', icon: '💎', name: 'Collectionneur', desc: 'Ramasse 20 énergies en une partie.', points: 300, stat: 'energy', target: 20 },
-    { id: 'chasseur-boss', icon: '👑', name: 'Chasseur de boss', desc: 'Survis à un boss.', points: 500 },
-    { id: 'defi-releve', icon: '📅', name: 'Défi relevé', desc: 'Termine un défi du jour.', points: 200 },
-    { id: 'vitesse-lumiere', icon: '⚡', name: 'Vitesse lumière', desc: 'Fais 50 dash au total.', points: 200, stat: 'dashes', target: 50 },
-    { id: 'intouchable', icon: '🛡️', name: 'Intouchable', desc: 'Atteins le niveau 5 sans prendre de bonus.', points: 400 },
-    { id: 'chrono', icon: '⏳', name: 'Contre la montre', desc: 'Fais 1 500 points en contre-la-montre.', points: 300, stat: 'timeattack', target: 1500 },
-    { id: 'veteran', icon: '🎖️', name: 'Vétéran', desc: 'Atteins le niveau 10.', points: 500, stat: 'level', target: 10 },
-    { id: 'evade', icon: '🌀', name: 'Évadé', desc: 'Échappe à un trou noir qui t\'attirait.', points: 300 },
-    { id: 'marathon', icon: '🏰', name: 'Marathon de boss', desc: 'Survis à 3 boss en Boss Rush.', points: 800 },
-    { id: 'neant', icon: '🌑', name: 'Vainqueur du Néant', desc: 'Survis au 5ᵉ boss : le Néant.', points: 1500 },
-    { id: 'extreme', icon: '🌶️', name: 'Extrême', desc: 'Atteins le combo x10 en mode Extrême.', points: 800 },
-    { id: 'chaos', icon: '🌪️', name: 'Maître du chaos', desc: 'Survis 90 s en mode Chaos.', points: 600 },
-    { id: 'demolisseur', icon: '💣', name: 'Démolisseur', desc: 'Détruis 12 dangers d\'un coup avec une bombe.', points: 400 },
-    { id: 'fidele', icon: '📆', name: 'Fidèle', desc: 'Joue le défi du jour 7 jours de suite.', points: 1000, stat: 'streak', target: 7 },
-    { id: 'missionnaire', icon: '✅', name: 'Missionnaire', desc: 'Termine 10 missions du jour.', points: 600, stat: 'missions', target: 10 },
+    { id: 'premier-vol', name: 'Premier vol', desc: 'Termine ta première partie.', points: 100 },
+    { id: 'survivant', name: 'Survivant', desc: 'Survis 2 minutes en une partie.', points: 300, stat: 'time', target: 120 },
+    { id: 'funambule', name: 'Funambule', desc: 'Frôle 10 éclats en une partie.', points: 200, stat: 'grazes', target: 10 },
+    { id: 'combo-parfait', name: 'Combo parfait', desc: 'Atteins le combo x5.', points: 300, stat: 'combo', target: 5 },
+    { id: 'collectionneur', name: 'Collectionneur', desc: 'Ramasse 20 énergies en une partie.', points: 300, stat: 'energy', target: 20 },
+    { id: 'chasseur-boss', name: 'Chasseur de boss', desc: 'Survis à un boss.', points: 500 },
+    { id: 'defi-releve', name: 'Défi relevé', desc: 'Termine un défi du jour.', points: 200 },
+    { id: 'vitesse-lumiere', name: 'Vitesse lumière', desc: 'Fais 50 dash au total.', points: 200, stat: 'dashes', target: 50 },
+    { id: 'intouchable', name: 'Intouchable', desc: 'Atteins le niveau 5 sans prendre de bonus.', points: 400 },
+    { id: 'chrono', name: 'Contre la montre', desc: 'Fais 1 500 points en contre-la-montre.', points: 300, stat: 'timeattack', target: 1500 },
+    { id: 'veteran', name: 'Vétéran', desc: 'Atteins le niveau 10.', points: 500, stat: 'level', target: 10 },
+    { id: 'evade', name: 'Évadé', desc: 'Échappe à un trou noir qui t\'attirait.', points: 300 },
+    { id: 'marathon', name: 'Marathon de boss', desc: 'Survis à 3 boss en Boss Rush.', points: 800 },
+    { id: 'neant', name: 'Vainqueur du Néant', desc: 'Survis au 5ᵉ boss : le Néant.', points: 1500 },
+    { id: 'extreme', name: 'Extrême', desc: 'Atteins le combo x10 en mode Extrême.', points: 800 },
+    { id: 'chaos', name: 'Maître du chaos', desc: 'Survis 90 s en mode Chaos.', points: 600 },
+    { id: 'demolisseur', name: 'Démolisseur', desc: 'Détruis 12 dangers d\'un coup avec une bombe.', points: 400 },
+    { id: 'fidele', name: 'Fidèle', desc: 'Joue le défi du jour 7 jours de suite.', points: 1000, stat: 'streak', target: 7 },
+    { id: 'missionnaire', name: 'Missionnaire', desc: 'Termine 10 missions du jour.', points: 600, stat: 'missions', target: 10 },
   ];
 
   // Données sauvegardées : succès obtenus, meilleures valeurs, dash au total
@@ -1342,7 +1343,7 @@
     ach.unlocked[id] = true;
     saveAch();
     game.sessionAch.push(info.name);
-    showToast(info.icon + ' Succès : ' + info.name + ' (+' + formatScore(info.points) + ' pts)');
+    showToast('Succès : ' + info.name + ' (+' + formatScore(info.points) + ' pts)', 'ach');
     addPoints(info.points);
     Sound.achievement();
   }
@@ -1423,7 +1424,7 @@
       storage.set(CONFIG.STORAGE_KEY_OWNED, JSON.stringify(game.owned));
       for (const ship of fresh) {
         game.sessionShips.push(ship.name);
-        showToast('🚀 Nouveau vaisseau : ' + ship.name + ' !');
+        showToast('Nouveau vaisseau : ' + ship.name, 'ship');
       }
     }
     return fresh;
@@ -2069,26 +2070,29 @@
   function refreshMenu() {
     ui.menuBest.textContent = formatScore(game.best);
     ui.menuDaily.textContent = formatScore(loadDailyBest(todayKey()));
+    $('menu-info-ships').textContent = game.owned.length + ' / ' + SHIPS.length;
+    $('menu-info-ach').textContent = unlockedCount() + ' / ' + ACHIEVEMENTS.length;
     buildMissionsPanel();
   }
 
   // --- Notifications (succès, vaisseau débloqué) ---
   const toasts = { queue: [], timer: 0 };
 
-  function showToast(text) {
+  // kind : 'ach' (succès), 'mission' ou 'ship' (change la couleur de la bande)
+  function showToast(text, kind) {
     if (game.state !== 'playing') return; // en fin de partie, l'écran de fin les affiche
-    toasts.queue.push(text);
+    toasts.queue.push({ text: text, kind: kind || 'ach' });
     if (ui.toast.classList.contains('hidden')) nextToast();
   }
 
   function nextToast() {
-    const text = toasts.queue.shift();
-    if (!text) {
+    const item = toasts.queue.shift();
+    if (!item) {
       ui.toast.classList.add('hidden');
       return;
     }
-    ui.toast.textContent = text;
-    ui.toast.classList.remove('hidden');
+    ui.toast.textContent = item.text;
+    ui.toast.className = 'toast kind-' + item.kind;
     // relance l'animation d'apparition
     ui.toast.style.animation = 'none';
     void ui.toast.offsetWidth;
@@ -2155,10 +2159,10 @@
       el.className = 'ach' + (unlocked ? ' done' : '');
       const icon = document.createElement('span');
       icon.className = 'ach-icon';
-      icon.textContent = unlocked ? a.icon : '🔒';
+      icon.textContent = unlocked ? '✓' : '';
       const name = document.createElement('span');
       name.className = 'ach-name';
-      name.textContent = a.name + ' · ' + a.points + ' pts';
+      name.textContent = a.name + ' · ' + formatScore(a.points) + ' pts';
       const desc = document.createElement('span');
       desc.className = 'ach-desc';
       desc.textContent = a.desc;
@@ -2197,7 +2201,7 @@
     }
     ui.setReduce.checked = settings.reduceFx;
     const planned = storage.get(CONFIG.STORAGE_KEY_TUTO, '') !== '1';
-    ui.btnTutoAgain.textContent = planned ? 'Prévu à la prochaine partie ✓' : 'Revoir le tutoriel';
+    ui.btnTutoAgain.textContent = planned ? 'Prévu' : 'Revoir';
   }
 
   function applyReduceFx() {
@@ -2292,7 +2296,7 @@
       tag.textContent = ship.perk;
       const status = document.createElement('span');
       status.className = 'ship-status';
-      status.textContent = selected ? 'Choisi' : (unlocked ? 'Choisir' : '🔒 ' + shortPoints(ship.cost) + (ship.need ? ' + ★' : ''));
+      status.textContent = selected ? 'Choisi' : (unlocked ? 'Choisir' : shortPoints(ship.cost) + ' pts' + (ship.need ? ' + exploit' : ''));
       tile.appendChild(preview);
       tile.appendChild(name);
       tile.appendChild(tag);
@@ -2335,13 +2339,13 @@
     const addNeed = function (ok, text) {
       const li = document.createElement('li');
       li.className = ok ? 'ok' : '';
-      li.textContent = (ok ? '✓ ' : '○ ') + text;
+      li.textContent = text;
       list.appendChild(li);
     };
     const missing = ship.cost - game.points;
     addNeed(missing <= 0, formatScore(ship.cost) + ' points cumulés' +
       (missing > 0 ? ' (encore ' + formatScore(missing) + ')' : ''));
-    if (ship.need) addNeed(shipNeedMet(ship), '★ ' + SHIP_NEEDS[ship.need].text);
+    if (ship.need) addNeed(shipNeedMet(ship), 'Exploit : ' + SHIP_NEEDS[ship.need].text.toLowerCase());
     el.appendChild(list);
   }
 
@@ -2383,7 +2387,7 @@
       name.textContent = theme.name;
       const status = document.createElement('span');
       status.className = 'theme-status';
-      status.textContent = selected ? 'Choisi' : (unlocked ? 'Choisir' : '🔒 ' + shortPoints(theme.cost));
+      status.textContent = selected ? 'Choisi' : (unlocked ? 'Choisir' : shortPoints(theme.cost) + ' pts');
       tile.appendChild(swatch);
       tile.appendChild(name);
       tile.appendChild(status);
@@ -2507,7 +2511,7 @@
     if (value.length < 2) return { error: 'Au moins 2 caractères' };
     if (value.length > 16) return { error: '16 caractères maximum' };
     if (!PSEUDO_CHARS.test(value)) return { error: 'Seulement des lettres, des chiffres, des espaces et . - _' };
-    if (isRudePseudo(value)) return { error: 'Choisis un pseudo plus sympa 🙂' };
+    if (isRudePseudo(value)) return { error: 'Choisis un pseudo plus sympa' };
     return { value: value };
   }
 
@@ -2650,8 +2654,7 @@
       if (token !== online.goToken) return;
       const res = out.results[key];
       if (res && res.rang) {
-        const medal = res.rang <= 3 ? ['🥇 ', '🥈 ', '🥉 '][res.rang - 1] : '';
-        ui.goRank.textContent = medal + (mode === 'daily' ? 'Classement du jour : ' : 'Classement : ') +
+        ui.goRank.textContent = (mode === 'daily' ? 'Classement du jour : ' : 'Classement : ') +
           ordinal(res.rang) + ' sur ' + res.total;
       } else if (!getPseudo()) {
         showGameOverRank(); // le pseudo était pris : on en redemande un
@@ -2745,10 +2748,10 @@
       }
       previous = rank;
       const li = document.createElement('li');
-      li.className = 'lb-row' + (row.moi ? ' me' : '') + (rank <= 3 ? ' podium' : '');
+      li.className = 'lb-row' + (row.moi ? ' me' : '') + (rank <= 3 ? ' r' + rank : '');
       const place = document.createElement('span');
       place.className = 'lb-rank';
-      place.textContent = rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : String(rank);
+      place.textContent = String(rank);
       const name = document.createElement('span');
       name.className = 'lb-name';
       name.textContent = String(row.pseudo || '?') + (row.moi ? ' (toi)' : '');
@@ -2884,7 +2887,7 @@
     ach.missions++;
     saveAch();
     game.sessionMissions.push(m.text);
-    showToast('✅ Mission : ' + m.text + ' (+' + formatScore(m.reward) + ' pts)');
+    showToast('Mission accomplie : ' + m.text + ' (+' + formatScore(m.reward) + ' pts)', 'mission');
     Sound.mission();
     addPoints(m.reward);
     if (ach.missions >= 10) unlockAchievement('missionnaire');
@@ -2920,7 +2923,7 @@
       li.className = 'mission' + (done ? ' done' : '');
       const text = document.createElement('span');
       text.className = 'mission-text';
-      text.textContent = (done ? '✓ ' : '') + m.text;
+      text.textContent = m.text;
       const reward = document.createElement('span');
       reward.className = 'mission-reward';
       reward.textContent = done ? 'Fait' : '+' + shortPoints(m.reward);
@@ -2940,8 +2943,8 @@
     }
     const streak = currentStreak();
     ui.streak.textContent = streak > 0
-      ? '🔥 Série du défi : ' + streak + (streak > 1 ? ' jours' : ' jour')
-      : '🔥 Joue le défi du jour pour lancer une série';
+      ? 'Série : ' + streak + (streak > 1 ? ' jours' : ' jour')
+      : 'Joue le défi du jour pour lancer une série';
   }
 
   // --- Série : jours de suite où l'on a joué le défi du jour ---
@@ -2971,11 +2974,11 @@
     recordBest('streak', st.count);
     saveAch();
     if (st.count % 7 === 0) {
-      game.sessionStreak = '🔥 ' + st.count + ' jours de suite ! +' + formatScore(CONFIG.STREAK_BONUS) + ' pts';
+      game.sessionStreak = st.count + ' jours de suite au défi : +' + formatScore(CONFIG.STREAK_BONUS) + ' pts';
       addPoints(CONFIG.STREAK_BONUS);
       Sound.mission();
     } else {
-      game.sessionStreak = '🔥 Série du défi : ' + st.count + (st.count > 1 ? ' jours' : ' jour');
+      game.sessionStreak = 'Série du défi : ' + st.count + (st.count > 1 ? ' jours' : ' jour');
     }
     if (st.count >= 7) unlockAchievement('fidele');
   }
@@ -3257,13 +3260,15 @@
     // Badges : record battu, vaisseau débloqué, succès, missions, série
     ui.goRecord.textContent = recordText;
     ui.goRecord.classList.toggle('hidden', !recordText);
-    ui.goAch.textContent = game.sessionAch.length ? '🏆 Succès : ' + game.sessionAch.join(', ') : '';
+    ui.goAch.textContent = game.sessionAch.length ? 'Succès : ' + game.sessionAch.join(', ') : '';
     ui.goAch.classList.toggle('hidden', game.sessionAch.length === 0);
-    ui.goMissions.textContent = game.sessionMissions.length ? '✅ Mission : ' + game.sessionMissions.join(', ') : '';
+    ui.goMissions.textContent = game.sessionMissions.length
+      ? (game.sessionMissions.length > 1 ? 'Missions : ' : 'Mission : ') + game.sessionMissions.join(', ')
+      : '';
     ui.goMissions.classList.toggle('hidden', game.sessionMissions.length === 0);
     ui.goStreak.textContent = game.sessionStreak;
     ui.goStreak.classList.toggle('hidden', !game.sessionStreak);
-    ui.goUnlock.textContent = unlocked.length ? 'Nouveau vaisseau : ' + unlocked.join(', ') + ' !' : '';
+    ui.goUnlock.textContent = unlocked.length ? 'Nouveau vaisseau : ' + unlocked.join(', ') : '';
     ui.goUnlock.classList.toggle('hidden', unlocked.length === 0);
     const next = nextShip();
     ui.goProgress.textContent = next
@@ -4444,7 +4449,7 @@
     addText(p.x, p.y - 36, 'Bouclier brisé !', COLORS.shield, 16, 1, -40);
     game.shake = Math.max(game.shake, reducedFx() ? 2 : 8);
     Sound.shieldHit();
-    breakCombo(); // un coup encaissé fait perdre le combo
+    // Le bouclier protège aussi le combo : on ne le perd pas
   }
 
   // --- Combo ---
@@ -5288,7 +5293,7 @@
       ctx.closePath();
       ctx.fill();
     } else if (type === 'double') {
-      ctx.font = '900 ' + Math.round(s * 1.35) + 'px ' + FONT;
+      ctx.font = Math.round(s * 1.2) + 'px ' + FONT;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('x2', 0, s * 0.08);
@@ -5975,15 +5980,24 @@
   function drawTexts() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(5, 1, 15, 0.9)';
     for (const t of game.texts) {
       ctx.globalAlpha = Math.min(1, (t.life / t.maxLife) * 2.5);
-      ctx.font = '800 ' + t.size + 'px ' + FONT;
+      ctx.font = t.size + 'px ' + FONT;
+      // Texte trop long pour l'écran : on le réduit
+      let size = t.size;
+      const width = ctx.measureText(t.text).width;
+      if (width > view.W - 28) {
+        size = Math.floor(t.size * (view.W - 28) / width);
+        ctx.font = size + 'px ' + FONT;
+      }
+      // Contour sombre net (lisible sur tout le décor), puis la couleur
+      ctx.lineWidth = Math.max(3, size * 0.18);
+      ctx.strokeText(t.text, t.x, t.y);
       ctx.fillStyle = t.color;
-      ctx.shadowColor = t.color;
-      ctx.shadowBlur = glow(12);
       ctx.fillText(t.text, t.x, t.y);
     }
-    ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
   }
 
@@ -5999,14 +6013,15 @@
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r + 10 + 80 * k, 0, TAU);
     ctx.stroke();
-    ctx.font = '800 40px ' + FONT;
+    ctx.font = '40px ' + FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = 'rgba(5, 1, 15, 0.9)';
+    ctx.strokeText('PRÊT ?', view.W / 2, view.H * 0.3);
     ctx.fillStyle = COLORS.text;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = glow(14);
     ctx.fillText('PRÊT ?', view.W / 2, view.H * 0.3);
-    ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
   }
 
@@ -6128,6 +6143,9 @@
     if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
     if (window.ResizeObserver) new ResizeObserver(function () { resize(); }).observe(canvas);
     resize();
+
+    // Police des textes du jeu : chargée tout de suite pour le canvas
+    if (document.fonts && document.fonts.load) document.fonts.load('20px Bungee').catch(function () {});
 
     // Interface de départ
     $('game-version').textContent = GAME_VERSION;

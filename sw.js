@@ -12,7 +12,7 @@
    utilisée au lancement suivant.
    ====================================================================== */
 
-const VERSION = 'eclats-neon-2.0.1'; // même numéro que GAME_VERSION dans game.js
+const VERSION = 'eclats-neon-2.1'; // même numéro que GAME_VERSION dans game.js
 
 // Tous les fichiers nécessaires pour jouer
 const FILES = [
@@ -21,6 +21,7 @@ const FILES = [
   './style.css',
   './game.js',
   './manifest.json',
+  './fonts/bungee.woff2',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
