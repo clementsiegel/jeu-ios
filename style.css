@@ -452,6 +452,16 @@ body {
   box-shadow: 0 0 18px rgba(255, 225, 77, 0.35);
 }
 
+.btn-board {
+  border-color: rgba(255, 61, 139, 0.55);
+  color: #ff8fbd;
+}
+
+.btn-board:hover {
+  border-color: var(--pink);
+  box-shadow: 0 0 18px rgba(255, 61, 139, 0.35);
+}
+
 /* ---------- Cartes du menu ---------- */
 .cards {
   display: grid;
@@ -1127,6 +1137,202 @@ kbd {
 .segmented button.active {
   background: var(--cyan);
   color: #04121a;
+}
+
+/* ---------- Classement en ligne ---------- */
+.board-title {
+  color: #ffe6f0;
+  text-shadow: 0 0 8px var(--pink), 0 0 26px var(--pink);
+}
+
+.online-box {
+  max-width: 420px;
+  margin: 14px auto 0;
+}
+
+.rank-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 2px 12px;
+}
+
+.rank-text {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.rank-text:empty {
+  display: none;
+}
+
+.link-btn {
+  min-height: 36px;
+  padding: 6px 4px;
+  border: 0;
+  background: none;
+  color: var(--cyan);
+  font: 700 14px var(--font);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.pseudo-form {
+  display: grid;
+  gap: 8px;
+}
+
+.pseudo-form.busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.pseudo-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: center;
+}
+
+.pseudo-row {
+  display: flex;
+  gap: 8px;
+}
+
+.pseudo-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--panel-border);
+  background: rgba(5, 1, 15, 0.85);
+  color: var(--text);
+  font: 600 16px var(--font); /* 16 px minimum : l'iPhone ne zoome pas sur le champ */
+  -webkit-user-select: text;
+  user-select: text;
+  outline: none;
+}
+
+.pseudo-row input::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.pseudo-row input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgba(62, 242, 255, 0.35);
+}
+
+.pseudo-row .btn {
+  min-height: 44px;
+  padding: 7px 20px;
+}
+
+.pseudo-msg {
+  margin: 0;
+  min-height: 1.3em;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.pseudo-msg.error {
+  color: #ff8fbd;
+}
+
+.lb-tabs {
+  margin-top: 8px;
+}
+
+.lb-tabs button {
+  flex: 1;
+}
+
+.lb-me {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+}
+
+.lb-me-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0 8px;
+  margin: 0;
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.lb-me-line b {
+  color: var(--cyan);
+}
+
+.lb-list {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.lb-row {
+  display: grid;
+  grid-template-columns: 2.2em 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+}
+
+.lb-rank {
+  font-family: var(--mono);
+  font-weight: 800;
+  color: var(--muted);
+  text-align: center;
+}
+
+.lb-row.podium .lb-rank {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.lb-name {
+  overflow: hidden;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.lb-score {
+  font-family: var(--mono);
+  font-weight: 800;
+  color: var(--yellow);
+}
+
+.lb-row.me {
+  border-color: var(--cyan);
+  background: rgba(62, 242, 255, 0.12);
+  box-shadow: 0 0 12px -4px var(--cyan);
+}
+
+.lb-row.me .lb-name {
+  color: var(--cyan);
+}
+
+.lb-gap {
+  color: var(--muted);
+  line-height: 1;
+  text-align: center;
 }
 
 /* Légende du menu : nouveaux dangers */

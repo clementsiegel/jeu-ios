@@ -29,7 +29,19 @@
   // Version du jeu, affichée dans les Réglages. À augmenter à chaque mise à jour :
   // grosse mise à jour 1.8 -> 1.9, petite correction 1.8 -> 1.81 -> 1.82.
   // Penser à mettre la même dans VERSION, en haut de sw.js (mode hors ligne).
-  const GAME_VERSION = '1.9';
+  const GAME_VERSION = '2.0';
+
+  // --- Classement en ligne (Supabase) ---
+  // Les 2 codes se trouvent dans Supabase, bouton "Connect" du projet
+  // (ou Project Settings > API) :
+  //   URL : l'adresse du projet, par ex. https://abcdefghijkl.supabase.co
+  //   KEY : la clé publique ("anon public" ou "publishable").
+  // Cette clé peut être visible dans le code : classement-supabase.sql protège
+  // les données. Laisser vide = classement désactivé.
+  const ONLINE = {
+    URL: '',
+    KEY: '',
+  };
 
   const CONFIG = {
     // --- Affichage ---
@@ -217,6 +229,9 @@
     STORAGE_KEY_SETTINGS: 'eclatsNeon.reglages',
     STORAGE_KEY_TUTO: 'eclatsNeon.tutoFait',
     STORAGE_KEY_DATA_VERSION: 'eclatsNeon.versionDonnees',
+    STORAGE_KEY_PLAYER: 'eclatsNeon.joueur',   // identifiant secret pour le classement en ligne
+    STORAGE_KEY_PSEUDO: 'eclatsNeon.pseudo',
+    STORAGE_KEY_PENDING: 'eclatsNeon.classementEnAttente', // scores pas encore envoyés
     // Changer ce numéro efface la progression de TOUS les joueurs
     // (records, points, vaisseaux, succès) au lancement suivant. Le réglage du son est gardé.
     DATA_VERSION: '2',
@@ -434,7 +449,7 @@
   // DATA_VERSION change. Doit passer AVANT tout chargement de données.
   function resetOldData() {
     if (storage.get(CONFIG.STORAGE_KEY_DATA_VERSION, '') === CONFIG.DATA_VERSION) return;
-    const keep = [CONFIG.STORAGE_KEY_MUTE];
+    const keep = [CONFIG.STORAGE_KEY_MUTE, CONFIG.STORAGE_KEY_PLAYER, CONFIG.STORAGE_KEY_PSEUDO];
     try {
       const keys = [];
       for (let i = 0; i < window.localStorage.length; i++) {
@@ -1210,6 +1225,8 @@
   function onKeyDown(e) {
     // On laisse passer les raccourcis du navigateur (Ctrl+R, Ctrl+P…)
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // On écrit son pseudo : les touches du jeu (Espace, Entrée, M, P…) ne comptent pas
+    if (isTyping(e.target)) return;
     Sound.unlock();
     const code = e.code;
 
@@ -1258,6 +1275,11 @@
 
   function onKeyUp(e) {
     input.keys.delete(e.code);
+  }
+
+  function isTyping(target) {
+    return !!(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') &&
+      target.type !== 'range' && target.type !== 'checkbox');
   }
 
   function pointerToWorld(e) {
@@ -1415,6 +1437,23 @@
     setJoystick: $('set-joystick'),
     setReduce: $('set-reduce'),
     btnTutoAgain: $('btn-tuto-again'),
+    goOnline: $('go-online'),
+    goRankRow: $('go-rank-row'),
+    goRank: $('go-rank'),
+    goPseudoForm: $('go-pseudo-form'),
+    goPseudoInput: $('go-pseudo-input'),
+    goPseudoMsg: $('go-pseudo-msg'),
+    lbTabs: $('lb-tabs'),
+    lbSub: $('lb-sub'),
+    lbMe: $('lb-me'),
+    lbMeLine: $('lb-me-line'),
+    lbMeName: $('lb-me-name'),
+    lbPseudoForm: $('lb-pseudo-form'),
+    lbPseudoLabel: $('lb-pseudo-label'),
+    lbPseudoInput: $('lb-pseudo-input'),
+    lbPseudoMsg: $('lb-pseudo-msg'),
+    lbList: $('lb-list'),
+    lbStatus: $('lb-status'),
     current: 'menu', // écran actuellement affiché
     screens: {
       menu: $('screen-menu'),
@@ -1424,11 +1463,12 @@
       modes: $('screen-modes'),
       achievements: $('screen-achievements'),
       settings: $('screen-settings'),
+      leaderboard: $('screen-leaderboard'),
     },
   };
 
   // Sous-écrans du menu : Échap ou "Retour" ramène au menu
-  const SUB_SCREENS = ['hangar', 'modes', 'achievements', 'settings'];
+  const SUB_SCREENS = ['hangar', 'modes', 'achievements', 'settings', 'leaderboard'];
 
   const ICON_SOUND_ON =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/>' +
@@ -1851,6 +1891,384 @@
   }
 
   /* ====================================================================
+     CLASSEMENT EN LIGNE
+     Les scores partent vers Supabase (voir classement-supabase.sql).
+     Sans internet, ils attendent sur l'appareil et partent plus tard.
+     Chaque appareil a un identifiant secret : personne d'autre ne peut
+     changer son pseudo ou ses scores.
+     ==================================================================== */
+
+  const LB_MODES = ['normal', 'daily', 'timeattack'];
+  const LB_SIZE = 20; // nombre de joueurs affichés
+  const PSEUDO_CHARS = /^[A-Za-z0-9À-ÖØ-öø-ÿ _.\-]+$/;
+  // Mots refusés dans les pseudos (vérification simple, faite sur l'appareil)
+  const RUDE_PARTS = ['putain', 'salope', 'connard', 'connasse', 'encule', 'enfoire', 'batard',
+    'bougnoul', 'couille', 'nazi', 'hitler', 'fuck', 'shit', 'bitch', 'porn', 'penis', 'vagin'];
+  const RUDE_WORDS = ['pute', 'putes', 'pd', 'fdp', 'ntm', 'tg', 'cul', 'bite', 'con', 'conne',
+    'cons', 'merde', 'nique', 'niquer', 'nik', 'zob', 'sexe', 'sex', 'ass', 'fck'];
+
+  const online = {
+    enabled: /^https:\/\/\S+$/.test(ONLINE.URL) && ONLINE.KEY.length > 20,
+    playerId: '',
+    queue: null,   // envois en cours, l'un après l'autre
+    tab: 'normal', // onglet affiché dans l'écran du classement
+    lbToken: 0,    // une vieille réponse ne remplace jamais une plus récente
+    goToken: 0,
+  };
+
+  // Identifiant secret de l'appareil, créé la première fois
+  function playerId() {
+    if (online.playerId) return online.playerId;
+    let id = storage.get(CONFIG.STORAGE_KEY_PLAYER, '');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+      id = newUuid();
+      storage.set(CONFIG.STORAGE_KEY_PLAYER, id);
+    }
+    online.playerId = id;
+    return id;
+  }
+
+  function newUuid() {
+    const c = window.crypto;
+    if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+    const b = new Uint8Array(16);
+    if (c && c.getRandomValues) c.getRandomValues(b);
+    else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, function (x) { return x.toString(16).padStart(2, '0'); }).join('');
+    return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+  }
+
+  function getPseudo() { return storage.get(CONFIG.STORAGE_KEY_PSEUDO, ''); }
+  function setPseudo(pseudo) { storage.set(CONFIG.STORAGE_KEY_PSEUDO, pseudo); }
+
+  // Appelle une fonction du fichier classement-supabase.sql
+  function onlineCall(name, args) {
+    const headers = { 'Content-Type': 'application/json', apikey: ONLINE.KEY };
+    // Ancienne clé "anon" (un long code qui commence par eyJ) : elle va aussi ici
+    if (ONLINE.KEY.indexOf('sb_') !== 0) headers.Authorization = 'Bearer ' + ONLINE.KEY;
+    const ctrl = window.AbortController ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 10000) : 0;
+    const url = ONLINE.URL.replace(/\/+$/, '') + '/rest/v1/rpc/' + name;
+    return fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(args), signal: ctrl ? ctrl.signal : undefined })
+      .then(function (res) {
+        clearTimeout(timer);
+        return res.json().catch(function () { return null; }).then(function (data) {
+          if (res.ok) return data;
+          const err = new Error((data && data.message) || 'erreur');
+          err.refused = res.status === 400; // donnée refusée par le serveur : inutile de réessayer
+          throw err;
+        });
+      }, function () {
+        clearTimeout(timer);
+        const err = new Error('reseau');
+        err.refused = false;
+        throw err;
+      });
+  }
+
+  // --- Pseudo ---
+
+  function isRudePseudo(pseudo) {
+    const n = pseudo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/0/g, 'o').replace(/1/g, 'i').replace(/3/g, 'e').replace(/4/g, 'a')
+      .replace(/5/g, 's').replace(/7/g, 't').replace(/@/g, 'a');
+    const glued = n.replace(/[^a-z]/g, '');
+    for (const part of RUDE_PARTS) if (glued.indexOf(part) >= 0) return true;
+    for (const word of n.split(/[^a-z]+/)) if (RUDE_WORDS.indexOf(word) >= 0) return true;
+    return false;
+  }
+
+  function checkPseudo(text) {
+    const value = String(text || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+    if (value.length < 2) return { error: 'Au moins 2 caractères' };
+    if (value.length > 16) return { error: '16 caractères maximum' };
+    if (!PSEUDO_CHARS.test(value)) return { error: 'Seulement des lettres, des chiffres, des espaces et . - _' };
+    if (isRudePseudo(value)) return { error: 'Choisis un pseudo plus sympa 🙂' };
+    return { value: value };
+  }
+
+  function pseudoErrorText(err) {
+    if (err.message === 'pseudo_pris') return 'Ce pseudo est déjà pris, choisis-en un autre';
+    if (err.message === 'pseudo_invalide') return 'Seulement des lettres, des chiffres, des espaces et . - _';
+    if (err.message === 'reseau') return 'Pas de connexion internet, réessaie plus tard';
+    return 'Le classement ne répond pas, réessaie plus tard';
+  }
+
+  // Enregistre le pseudo en ligne (vérifie qu'il est libre), puis sur l'appareil
+  function savePseudo(text) {
+    const check = checkPseudo(text);
+    if (check.error) return Promise.reject(new Error(check.error));
+    return onlineCall('choisir_pseudo', { p_joueur: playerId(), p_pseudo: check.value })
+      .then(function (saved) {
+        setPseudo(typeof saved === 'string' && saved ? saved : check.value);
+      }, function (err) {
+        throw new Error(pseudoErrorText(err));
+      });
+  }
+
+  // Branche un formulaire "pseudo" (fin de partie ou écran du classement)
+  function bindPseudoForm(form, field, msg, onDone) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (form.classList.contains('busy')) return;
+      Sound.unlock();
+      form.classList.add('busy');
+      msg.classList.remove('error');
+      msg.textContent = 'Vérification…';
+      savePseudo(field.value).then(function () {
+        form.classList.remove('busy');
+        msg.textContent = '';
+        field.blur();
+        Sound.click();
+        onDone();
+      }, function (err) {
+        form.classList.remove('busy');
+        msg.classList.add('error');
+        msg.textContent = err.message;
+      });
+    });
+    // iPhone : remet la page en place quand le clavier se ferme
+    field.addEventListener('blur', function () { window.scrollTo(0, 0); });
+  }
+
+  // --- Scores en attente d'envoi : { "normal|": 1234, "daily|2026-11-03": 900 } ---
+
+  function boardKey(mode, day) {
+    return mode + '|' + (mode === 'daily' ? day : '');
+  }
+
+  function loadPending() {
+    const data = loadJSON(CONFIG.STORAGE_KEY_PENDING, {});
+    return Array.isArray(data) ? {} : data;
+  }
+
+  function queueOnlineScore(mode, score) {
+    if (!online.enabled || LB_MODES.indexOf(mode) < 0 || !(score > 0)) return;
+    const pending = loadPending();
+    const key = boardKey(mode, game.dailyKey);
+    pending[key] = Math.max(pending[key] || 0, Math.floor(score));
+    storage.set(CONFIG.STORAGE_KEY_PENDING, JSON.stringify(pending));
+  }
+
+  // Retire un score envoyé (sauf si un meilleur est arrivé entre-temps)
+  function dropPending(key, score) {
+    const pending = loadPending();
+    if (pending[key] !== undefined && pending[key] <= score) {
+      delete pending[key];
+      storage.set(CONFIG.STORAGE_KEY_PENDING, JSON.stringify(pending));
+    }
+  }
+
+  // Envoie les scores en attente. Résultat : { results: { clé: {rang, total, meilleur} }, error }
+  function flushOnlineScores() {
+    const run = function () { return sendPending(); };
+    online.queue = (online.queue || Promise.resolve()).then(run, run);
+    return online.queue;
+  }
+
+  function sendPending() {
+    const out = { results: {}, error: null };
+    const pseudo = getPseudo();
+    if (!online.enabled || !pseudo) return Promise.resolve(out);
+    const pending = loadPending();
+    let stop = false;
+    let chain = Promise.resolve();
+    Object.keys(pending).forEach(function (key) {
+      chain = chain.then(function () {
+        if (stop) return null;
+        const score = pending[key];
+        const parts = key.split('|');
+        if (LB_MODES.indexOf(parts[0]) < 0 || !(score > 0)) { dropPending(key, Infinity); return null; }
+        return onlineCall('envoyer_score', {
+          p_joueur: playerId(), p_pseudo: pseudo, p_mode: parts[0], p_jour: parts[1] || '', p_score: score,
+        }).then(function (res) {
+          out.results[key] = res;
+          dropPending(key, score);
+        }, function (err) {
+          out.error = err;
+          if (err.message === 'pseudo_pris') {
+            setPseudo(''); // pseudo pris entre-temps : il faudra en choisir un autre
+            stop = true;
+          } else if (err.refused) {
+            dropPending(key, score); // refusé pour de bon (ex. défi d'un jour passé)
+          } else {
+            stop = true; // pas de réseau : on réessaiera plus tard
+          }
+        });
+      });
+    });
+    return chain.then(function () { return out; });
+  }
+
+  function ordinal(n) {
+    return n === 1 ? '1ᵉʳ' : n + 'ᵉ';
+  }
+
+  // --- Fin de partie : place au classement, ou choix du pseudo ---
+
+  function showGameOverRank() {
+    const token = ++online.goToken;
+    const mode = game.mode;
+    const show = online.enabled && LB_MODES.indexOf(mode) >= 0;
+    ui.goOnline.classList.toggle('hidden', !show);
+    if (!show) return;
+    const pseudo = getPseudo();
+    ui.goPseudoForm.classList.toggle('hidden', !!pseudo);
+    ui.goRankRow.classList.toggle('hidden', !pseudo);
+    if (!pseudo) {
+      ui.goPseudoMsg.textContent = '';
+      ui.goPseudoMsg.classList.remove('error');
+      return;
+    }
+    ui.goRank.textContent = 'Envoi au classement…';
+    const key = boardKey(mode, game.dailyKey);
+    flushOnlineScores().then(function (out) {
+      if (token !== online.goToken) return;
+      const res = out.results[key];
+      if (res && res.rang) {
+        const medal = res.rang <= 3 ? ['🥇 ', '🥈 ', '🥉 '][res.rang - 1] : '';
+        ui.goRank.textContent = medal + (mode === 'daily' ? 'Classement du jour : ' : 'Classement : ') +
+          ordinal(res.rang) + ' sur ' + res.total;
+      } else if (!getPseudo()) {
+        showGameOverRank(); // le pseudo était pris : on en redemande un
+        ui.goPseudoMsg.textContent = 'Ton pseudo est déjà pris, choisis-en un autre';
+        ui.goPseudoMsg.classList.add('error');
+      } else if (out.error && !out.error.refused) {
+        ui.goRank.textContent = 'Hors ligne : ton score sera envoyé plus tard';
+      } else {
+        ui.goRank.textContent = '';
+      }
+    });
+  }
+
+  // --- Écran du classement ---
+
+  function openLeaderboard(mode) {
+    if (LB_MODES.indexOf(mode) >= 0) online.tab = mode;
+    openSubScreen('leaderboard', buildLeaderboard);
+  }
+
+  function buildLeaderboard() {
+    for (const b of ui.lbTabs.querySelectorAll('button')) {
+      const on = b.getAttribute('data-mode') === online.tab;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    const subs = {
+      normal: 'Le meilleur score de chaque joueur',
+      daily: 'Défi du ' + formatToday() + ' : les mêmes vagues pour tout le monde',
+      timeattack: 'Contre-la-montre : 60 secondes',
+    };
+    ui.lbSub.textContent = subs[online.tab];
+    showLbPseudo(false);
+    loadLeaderboard();
+  }
+
+  function showLbPseudo(editing) {
+    const pseudo = getPseudo();
+    const form = online.enabled && (editing || !pseudo);
+    ui.lbMe.classList.toggle('hidden', !online.enabled);
+    ui.lbMeLine.classList.toggle('hidden', form || !pseudo);
+    ui.lbMeName.textContent = pseudo;
+    ui.lbPseudoForm.classList.toggle('hidden', !form);
+    ui.lbPseudoLabel.textContent = pseudo ? 'Nouveau pseudo' : 'Choisis un pseudo pour apparaître dans le classement';
+    ui.lbPseudoInput.value = pseudo;
+    ui.lbPseudoMsg.textContent = '';
+    ui.lbPseudoMsg.classList.remove('error');
+  }
+
+  function loadLeaderboard() {
+    const token = ++online.lbToken;
+    ui.lbList.textContent = '';
+    if (!online.enabled) {
+      ui.lbStatus.textContent = 'Le classement en ligne n\'est pas encore activé.';
+      return;
+    }
+    ui.lbStatus.textContent = 'Chargement…';
+    const mode = online.tab;
+    flushOnlineScores().then(function () {
+      if (token !== online.lbToken) return null;
+      return onlineCall('voir_classement', {
+        p_mode: mode, p_jour: mode === 'daily' ? todayKey() : '', p_joueur: playerId(), p_nombre: LB_SIZE,
+      });
+    }).then(function (rows) {
+      if (token === online.lbToken && rows) renderLeaderboard(rows);
+    }, function (err) {
+      if (token !== online.lbToken) return;
+      ui.lbStatus.textContent = err.message === 'reseau'
+        ? 'Pas de connexion internet.'
+        : 'Le classement ne répond pas. Réessaie plus tard.';
+    });
+  }
+
+  function renderLeaderboard(rows) {
+    ui.lbList.textContent = '';
+    if (!Array.isArray(rows) || rows.length === 0) {
+      ui.lbStatus.textContent = 'Personne pour l\'instant : sois le premier !';
+      return;
+    }
+    const total = Number(rows[0].total) || rows.length;
+    ui.lbStatus.textContent = total + (total > 1 ? ' joueurs classés' : ' joueur classé');
+    let previous = 0;
+    for (const row of rows) {
+      const rank = Number(row.rang);
+      if (previous && rank > previous + 1) {
+        const gap = document.createElement('li');
+        gap.className = 'lb-gap';
+        gap.setAttribute('aria-hidden', 'true');
+        gap.textContent = '⋯';
+        ui.lbList.appendChild(gap);
+      }
+      previous = rank;
+      const li = document.createElement('li');
+      li.className = 'lb-row' + (row.moi ? ' me' : '') + (rank <= 3 ? ' podium' : '');
+      const place = document.createElement('span');
+      place.className = 'lb-rank';
+      place.textContent = rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : String(rank);
+      const name = document.createElement('span');
+      name.className = 'lb-name';
+      name.textContent = String(row.pseudo || '?') + (row.moi ? ' (toi)' : '');
+      const score = document.createElement('span');
+      score.className = 'lb-score';
+      score.textContent = formatScore(Number(row.score) || 0);
+      li.appendChild(place);
+      li.appendChild(name);
+      li.appendChild(score);
+      ui.lbList.appendChild(li);
+    }
+  }
+
+  function bindLeaderboard() {
+    bindButton('btn-leaderboard', function () { openLeaderboard(); });
+    bindButton('btn-lb-back', backToMenu);
+    bindButton('btn-lb-rename', function () {
+      showLbPseudo(true);
+      ui.lbPseudoInput.focus();
+    });
+    bindButton('btn-go-board', function () {
+      const mode = game.mode;
+      goToMenu();
+      openLeaderboard(mode);
+    });
+    for (const b of ui.lbTabs.querySelectorAll('button')) {
+      b.addEventListener('click', function () {
+        online.tab = b.getAttribute('data-mode');
+        buildLeaderboard();
+        Sound.click();
+      });
+    }
+    bindPseudoForm(ui.goPseudoForm, ui.goPseudoInput, ui.goPseudoMsg, showGameOverRank);
+    bindPseudoForm(ui.lbPseudoForm, ui.lbPseudoInput, ui.lbPseudoMsg, function () {
+      showLbPseudo(false);
+      loadLeaderboard();
+    });
+    // Scores joués sans internet : on les envoie dès l'ouverture du jeu
+    if (online.enabled) flushOnlineScores();
+  }
+
+  /* ====================================================================
      9. DÉROULEMENT D'UNE PARTIE
      Chaque fonction vérifie l'état actuel : un double clic ou une touche
      appuyée deux fois ne peut jamais lancer deux parties en même temps.
@@ -1928,6 +2346,8 @@
       saveDailyIfNeeded(score);
       addPoints(score);
       saveAch();
+      queueOnlineScore(game.mode, score);
+      if (getPseudo()) flushOnlineScores();
     }
     Music.want(false);
     clearWorld();
@@ -1997,6 +2417,7 @@
     game.newRecord = (mode === 'normal' || mode === 'daily') && saveBestIfNeeded(finalScore);
     game.newDailyRecord = saveDailyIfNeeded(finalScore);
     game.newModeRecord = mode === 'timeattack' && saveTimeAttackIfNeeded(finalScore);
+    queueOnlineScore(mode, finalScore);
     const pointsBefore = game.points;
     addPoints(finalScore);
     finishAchievements(finalScore); // peut aussi rapporter des points
@@ -2039,6 +2460,7 @@
 
     showScreen('gameover');
     setState('gameover');
+    showGameOverRank();
     if (game.newRecord || game.newDailyRecord || game.newModeRecord) Sound.record();
     else Sound.gameOver();
     if (unlocked.length) Sound.newShip();
@@ -4169,6 +4591,7 @@
     bindButton('btn-mode-zen', function () { startGame('zen'); });
     bindButton('btn-tuto-skip', finishTutorial);
     bindSettings();
+    bindLeaderboard();
     applyReduceFx();
     bindButton('btn-resume', resumeGame);
     bindButton('btn-quit', function () { Sound.click(); goToMenu(); });

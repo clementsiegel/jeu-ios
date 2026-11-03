@@ -87,6 +87,7 @@
         <div class="menu-actions">
           <button type="button" id="btn-play" class="btn btn-primary">Jouer</button>
           <button type="button" id="btn-modes" class="btn btn-daily">Modes</button>
+          <button type="button" id="btn-leaderboard" class="btn btn-board">Classement</button>
           <button type="button" id="btn-ships" class="btn">Vaisseaux</button>
           <button type="button" id="btn-achievements" class="btn">Succès</button>
           <button type="button" id="btn-settings" class="btn">Réglages</button>
@@ -168,6 +169,22 @@
           <span id="go-score" class="final-value">0</span>
         </div>
 
+        <!-- Classement en ligne : place obtenue, ou choix du pseudo (rempli par game.js) -->
+        <div id="go-online" class="online-box hidden">
+          <div id="go-rank-row" class="rank-row">
+            <span id="go-rank" class="rank-text" role="status" aria-live="polite"></span>
+            <button type="button" id="btn-go-board" class="link-btn">Voir le classement</button>
+          </div>
+          <form id="go-pseudo-form" class="pseudo-form hidden" autocomplete="off" novalidate>
+            <label for="go-pseudo-input" class="pseudo-label">Choisis un pseudo pour entrer dans le classement</label>
+            <div class="pseudo-row">
+              <input type="text" id="go-pseudo-input" maxlength="16" placeholder="Ton pseudo" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
+              <button type="submit" class="btn btn-small">OK</button>
+            </div>
+            <p id="go-pseudo-msg" class="pseudo-msg" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+
         <div class="stats">
           <div class="stat"><span id="go-best">0</span><small id="go-best-label">Record</small></div>
           <div class="stat"><span id="go-time">0:00</span><small>Temps</small></div>
@@ -245,6 +262,36 @@
       </div>
     </section>
 
+    <!-- ===== Écran du classement en ligne ===== -->
+    <section id="screen-leaderboard" class="screen" aria-labelledby="lb-title">
+      <div class="panel panel-small">
+        <h2 id="lb-title" class="screen-title board-title">CLASSEMENT</h2>
+        <div class="segmented lb-tabs" id="lb-tabs" role="group" aria-label="Mode de jeu">
+          <button type="button" data-mode="normal">Normal</button>
+          <button type="button" data-mode="daily">Défi du jour</button>
+          <button type="button" data-mode="timeattack">60 s</button>
+        </div>
+        <p id="lb-sub" class="hint hint-small"></p>
+        <div id="lb-me" class="lb-me">
+          <p id="lb-me-line" class="lb-me-line">Ton pseudo : <b id="lb-me-name"></b>
+            <button type="button" id="btn-lb-rename" class="link-btn">Changer</button></p>
+          <form id="lb-pseudo-form" class="pseudo-form hidden" autocomplete="off" novalidate>
+            <label for="lb-pseudo-input" class="pseudo-label" id="lb-pseudo-label">Choisis un pseudo pour apparaître dans le classement</label>
+            <div class="pseudo-row">
+              <input type="text" id="lb-pseudo-input" maxlength="16" placeholder="Ton pseudo" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
+              <button type="submit" class="btn btn-small">OK</button>
+            </div>
+            <p id="lb-pseudo-msg" class="pseudo-msg" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+        <ol id="lb-list" class="lb-list"></ol>
+        <p id="lb-status" class="hint"></p>
+        <div class="btn-row">
+          <button type="button" id="btn-lb-back" class="btn">Retour</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== Écran des réglages ===== -->
     <section id="screen-settings" class="screen" aria-labelledby="settings-title">
       <div class="panel panel-small">
@@ -280,7 +327,7 @@
         <div class="btn-row">
           <button type="button" id="btn-settings-back" class="btn">Retour</button>
         </div>
-        <p class="version-line">Éclats Néon · version <span id="game-version">1.9</span></p>
+        <p class="version-line">Éclats Néon · version <span id="game-version">2.0</span></p>
       </div>
     </section>
 
