@@ -60,8 +60,9 @@
     JOYSTICK_RADIUS: 60,     // rayon du joystick tactile, en pixels à l'écran
     JOYSTICK_DEADZONE: 0.12, // zone morte au centre du joystick (12 % du rayon)
     JOYSTICK_KNOB: 0.42,     // taille du bouton du joystick (par rapport au rayon)
-    JOYSTICK_ZONE: 1.6,      // zone où le pouce attrape le joystick (× le rayon) ; ailleurs = dash
-    JOYSTICK_MARGIN: 20,     // espace sous le joystick (en plus de la barre du bas des iPhone)
+    JOYSTICK_MARGIN: 20,     // espace sous le joystick "repère" (en plus de la barre du bas des iPhone)
+    TAP_TIME: 220,           // un doigt levé avant ce délai (ms)...
+    TAP_MOVE: 14,            // ...et qui a bougé de moins de 14 px = une tape = un dash
     DASH_SPEED: 1150,
     DASH_DURATION: 0.17,     // secondes d'invincibilité pendant le dash
     DASH_COOLDOWN: 1.1,      // secondes avant de pouvoir refaire un dash
@@ -1182,9 +1183,13 @@
       id: null,
       type: 'mouse',
       x: 0, y: 0,             // souris : position visée (unités de jeu)
+      baseX: 0, baseY: 0,     // joystick : centre (pixels à l'écran)
       fingerX: 0, fingerY: 0, // joystick : position du pouce (pixels à l'écran)
+      downAt: 0,              // moment où le doigt s'est posé (pour reconnaître une tape)
+      startX: 0, startY: 0,   // endroit où le doigt s'est posé
+      moved: 0,               // distance maximale parcourue depuis
     },
-    joyHome: { x: 0, y: 0 },  // centre du joystick, fixe en bas au milieu (pixels à l'écran)
+    joyHome: { x: 0, y: 0 },  // joystick "repère" en bas au milieu, quand on ne touche pas l'écran
   };
 
   const MOVE_KEYS = {
@@ -1303,17 +1308,22 @@
       if (e.button !== 0) return;
     }
     const ptr = input.pointer;
+    if (ptr.active) { requestDash(); return; } // deuxième doigt = dash
+
     if (e.pointerType === 'touch') {
-      // Joystick fixe en bas au milieu : le pouce posé dessus le prend,
-      // un doigt posé n'importe où ailleurs fait un dash
+      // Joystick flottant : il apparaît sous le pouce (entièrement visible à l'écran).
+      // Une simple tape (doigt levé tout de suite) fait un dash.
       const s = pointerToScreen(e);
-      const zone = joyRadius() * CONFIG.JOYSTICK_ZONE;
-      const onJoystick = Math.hypot(s.x - input.joyHome.x, s.y - input.joyHome.y) <= zone;
-      if (ptr.active || !onJoystick) { requestDash(); return; }
-      ptr.fingerX = s.x;
-      ptr.fingerY = s.y;
+      const R = joyRadius();
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      ptr.baseX = clamp(s.x, Math.min(R + 8, w / 2), Math.max(w - R - 8, w / 2));
+      ptr.baseY = clamp(s.y, Math.min(R + 8, h / 2), Math.max(h - R - 8, h / 2));
+      ptr.fingerX = ptr.startX = s.x;
+      ptr.fingerY = ptr.startY = s.y;
+      ptr.downAt = performance.now();
+      ptr.moved = 0;
     } else {
-      if (ptr.active) { requestDash(); return; } // deuxième pointeur = dash
       const pos = pointerToWorld(e);
       ptr.x = pos.x;
       ptr.y = pos.y;
@@ -1340,6 +1350,16 @@
       const s = pointerToScreen(e);
       ptr.fingerX = s.x;
       ptr.fingerY = s.y;
+      ptr.moved = Math.max(ptr.moved, Math.hypot(s.x - ptr.startX, s.y - ptr.startY));
+      // Si le pouce sort du cercle, le joystick le suit : changer de direction reste rapide
+      const R = joyRadius();
+      const dx = s.x - ptr.baseX;
+      const dy = s.y - ptr.baseY;
+      const len = Math.hypot(dx, dy);
+      if (len > R) {
+        ptr.baseX = s.x - (dx / len) * R;
+        ptr.baseY = s.y - (dy / len) * R;
+      }
       return;
     }
     const pos = pointerToWorld(e);
@@ -1348,18 +1368,23 @@
   }
 
   function onPointerEnd(e) {
-    if (e.pointerId === input.pointer.id) {
-      input.pointer.active = false;
-      input.pointer.id = null;
+    const ptr = input.pointer;
+    if (e.pointerId !== ptr.id) return;
+    // Tape rapide sans glisser = dash
+    if (e.type === 'pointerup' && ptr.type === 'touch' &&
+        performance.now() - ptr.downAt <= CONFIG.TAP_TIME && ptr.moved <= CONFIG.TAP_MOVE) {
+      requestDash();
     }
+    ptr.active = false;
+    ptr.id = null;
   }
 
   // Joystick : direction et force (0 à 1) selon la distance du pouce au centre
   function joystickVector() {
     const ptr = input.pointer;
     const R = joyRadius();
-    const dx = ptr.fingerX - input.joyHome.x;
-    const dy = ptr.fingerY - input.joyHome.y;
+    const dx = ptr.fingerX - ptr.baseX;
+    const dy = ptr.fingerY - ptr.baseY;
     const len = Math.hypot(dx, dy);
     const dead = R * CONFIG.JOYSTICK_DEADZONE;
     if (len <= dead) return { x: 0, y: 0 };
@@ -1372,7 +1397,7 @@
     return Math.max(CONFIG.JOYSTICK_MARGIN, safeBottom + 8);
   }
 
-  // Place du joystick : fixe, en bas au milieu de l'écran
+  // Place du joystick "repère" (quand on ne touche pas l'écran) : en bas au milieu
   function updateJoystickHome() {
     const R = joyRadius();
     const w = canvas.clientWidth || window.innerWidth;
@@ -2475,8 +2500,8 @@
   function showTutoStep() {
     const touch = input.touchMode;
     const texts = [
-      touch ? 'Pose le pouce sur le joystick en bas et pousse pour te déplacer' : 'Déplace-toi avec les flèches, ZQSD ou la souris',
-      touch ? 'Tape n\'importe où sur l\'écran pour faire un dash (invincible)' : 'Appuie sur Espace pour faire un dash (invincible)',
+      touch ? 'Pose le pouce n\'importe où et pousse pour te déplacer' : 'Déplace-toi avec les flèches, ZQSD ou la souris',
+      touch ? 'Tape l\'écran (ou avec un 2ᵉ doigt) pour faire un dash, invincible' : 'Appuie sur Espace pour faire un dash (invincible)',
       'Attrape l\'énergie jaune : +100 points et dash rechargé',
     ];
     ui.tutoStep.textContent = 'Tutoriel · étape ' + (game.tuto.step + 1) + '/3';
@@ -3823,9 +3848,9 @@
     let kx;
     let ky;
     let alpha;
-    bx = input.joyHome.x;
-    by = input.joyHome.y;
     if (ptr.active && ptr.type === 'touch') {
+      bx = ptr.baseX;
+      by = ptr.baseY;
       const dx = ptr.fingerX - bx;
       const dy = ptr.fingerY - by;
       const len = Math.hypot(dx, dy);
@@ -3834,10 +3859,10 @@
       ky = by + dy * k;
       alpha = 1;
     } else {
-      // Au repos : montre où poser le pouce
-      kx = bx;
-      ky = by;
-      alpha = 0.45;
+      // Au repos : repère discret en bas au milieu
+      bx = kx = input.joyHome.x;
+      by = ky = input.joyHome.y;
+      alpha = 0.4;
     }
     ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
     // Socle
