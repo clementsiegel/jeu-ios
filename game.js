@@ -29,7 +29,7 @@
   // Version du jeu, affichée dans les Réglages. À augmenter à chaque mise à jour :
   // grosse mise à jour 1.8 -> 1.9, petite correction 1.8 -> 1.81 -> 1.82.
   // Penser à mettre la même dans VERSION, en haut de sw.js (mode hors ligne).
-  const GAME_VERSION = '1.8';
+  const GAME_VERSION = '1.9';
 
   const CONFIG = {
     // --- Affichage ---
@@ -48,6 +48,8 @@
     JOYSTICK_RADIUS: 60,     // rayon du joystick tactile, en pixels à l'écran
     JOYSTICK_DEADZONE: 0.12, // zone morte au centre du joystick (12 % du rayon)
     JOYSTICK_KNOB: 0.42,     // taille du bouton du joystick (par rapport au rayon)
+    JOYSTICK_ZONE: 1.6,      // zone où le pouce attrape le joystick (× le rayon) ; ailleurs = dash
+    JOYSTICK_MARGIN: 20,     // espace sous le joystick (en plus de la barre du bas des iPhone)
     DASH_SPEED: 1150,
     DASH_DURATION: 0.17,     // secondes d'invincibilité pendant le dash
     DASH_COOLDOWN: 1.1,      // secondes avant de pouvoir refaire un dash
@@ -737,7 +739,7 @@
     cssW: 0,     // taille de l'écran (pixels CSS) au dernier redimensionnement
     cssH: 0,
     // Zone de jeu dans l'écran (pixels CSS). Sur téléphone en portrait, elle
-    // s'arrête sous le score et au-dessus du joystick / bouton DASH.
+    // s'arrête sous le score et au-dessus du joystick.
     ox: 0,
     oy: 0,
     fw: 0,
@@ -757,7 +759,7 @@
     const probe = $('safe-probe').getBoundingClientRect();
     const safeBottom = Math.max(0, h - probe.bottom);
     const top = Math.round(buttons.bottom + 10);                         // sous le score et les boutons
-    const bottom = Math.round(Math.max(24, safeBottom) + 84 + 16);       // au-dessus du joystick et de DASH
+    const bottom = Math.round(joyBottomGap(safeBottom) + joyRadius() * 2 + 12); // au-dessus du joystick
     const fh = h - top - bottom;
     if (fh < w * 0.9) return full; // écran trop court : on garde tout
     return { x: 0, y: top, w: w, h: fh, framed: true };
@@ -1165,10 +1167,9 @@
       id: null,
       type: 'mouse',
       x: 0, y: 0,             // souris : position visée (unités de jeu)
-      baseX: 0, baseY: 0,     // joystick : centre (pixels à l'écran)
       fingerX: 0, fingerY: 0, // joystick : position du pouce (pixels à l'écran)
     },
-    joyHome: { x: 0, y: 0 },  // place du joystick "repère" quand on ne touche pas l'écran
+    joyHome: { x: 0, y: 0 },  // centre du joystick, fixe en bas au milieu (pixels à l'écran)
   };
 
   const MOVE_KEYS = {
@@ -1280,26 +1281,24 @@
       if (e.button !== 0) return;
     }
     const ptr = input.pointer;
-    if (ptr.active) { requestDash(); return; } // deuxième doigt = dash
-
-    ptr.active = true;
-    ptr.id = e.pointerId;
-    ptr.type = e.pointerType;
     if (e.pointerType === 'touch') {
-      // Joystick flottant : il apparaît sous le pouce (entièrement visible à l'écran)
+      // Joystick fixe en bas au milieu : le pouce posé dessus le prend,
+      // un doigt posé n'importe où ailleurs fait un dash
       const s = pointerToScreen(e);
-      const R = joyRadius();
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      ptr.baseX = clamp(s.x, Math.min(R + 8, w / 2), Math.max(w - R - 8, w / 2));
-      ptr.baseY = clamp(s.y, Math.min(R + 8, h / 2), Math.max(h - R - 8, h / 2));
+      const zone = joyRadius() * CONFIG.JOYSTICK_ZONE;
+      const onJoystick = Math.hypot(s.x - input.joyHome.x, s.y - input.joyHome.y) <= zone;
+      if (ptr.active || !onJoystick) { requestDash(); return; }
       ptr.fingerX = s.x;
       ptr.fingerY = s.y;
     } else {
+      if (ptr.active) { requestDash(); return; } // deuxième pointeur = dash
       const pos = pointerToWorld(e);
       ptr.x = pos.x;
       ptr.y = pos.y;
     }
+    ptr.active = true;
+    ptr.id = e.pointerId;
+    ptr.type = e.pointerType;
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* sans importance */ }
   }
 
@@ -1319,15 +1318,6 @@
       const s = pointerToScreen(e);
       ptr.fingerX = s.x;
       ptr.fingerY = s.y;
-      // Si le pouce sort du cercle, le joystick le suit : changer de direction reste rapide
-      const R = joyRadius();
-      const dx = s.x - ptr.baseX;
-      const dy = s.y - ptr.baseY;
-      const len = Math.hypot(dx, dy);
-      if (len > R) {
-        ptr.baseX = s.x - (dx / len) * R;
-        ptr.baseY = s.y - (dy / len) * R;
-      }
       return;
     }
     const pos = pointerToWorld(e);
@@ -1346,8 +1336,8 @@
   function joystickVector() {
     const ptr = input.pointer;
     const R = joyRadius();
-    const dx = ptr.fingerX - ptr.baseX;
-    const dy = ptr.fingerY - ptr.baseY;
+    const dx = ptr.fingerX - input.joyHome.x;
+    const dy = ptr.fingerY - input.joyHome.y;
     const len = Math.hypot(dx, dy);
     const dead = R * CONFIG.JOYSTICK_DEADZONE;
     if (len <= dead) return { x: 0, y: 0 };
@@ -1355,16 +1345,20 @@
     return { x: (dx / len) * force, y: (dy / len) * force };
   }
 
-  // Place du joystick "repère" : en bas à gauche, aligné sur le bas du bouton DASH
-  // (qui tient déjà compte de la barre du bas des iPhone)
+  // Espace entre le bas de l'écran et le joystick (tient compte de la barre du bas des iPhone)
+  function joyBottomGap(safeBottom) {
+    return Math.max(CONFIG.JOYSTICK_MARGIN, safeBottom + 8);
+  }
+
+  // Place du joystick : fixe, en bas au milieu de l'écran
   function updateJoystickHome() {
     const R = joyRadius();
+    const w = canvas.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || window.innerHeight;
-    let y = h - R - 24;
-    const dash = ui.btnDash.getBoundingClientRect();
-    if (dash.height > 0) y = dash.bottom - canvas.getBoundingClientRect().top - R;
-    input.joyHome.x = R + 28;
-    input.joyHome.y = clamp(y, R + 8, Math.max(R + 8, h - R - 8));
+    const probe = $('safe-probe').getBoundingClientRect();
+    const safeBottom = Math.max(0, h - probe.bottom);
+    input.joyHome.x = w / 2;
+    input.joyHome.y = clamp(h - joyBottomGap(safeBottom) - R, R + 8, Math.max(R + 8, h - R - 8));
   }
 
   /* ====================================================================
@@ -1378,7 +1372,6 @@
     level: $('hud-level'),
     btnPause: $('btn-pause'),
     btnSound: $('btn-sound'),
-    btnDash: $('btn-dash'),
     menuBest: $('menu-best'),
     goScore: $('go-score'),
     goBest: $('go-best'),
@@ -1469,7 +1462,6 @@
     ui.hud.classList.toggle('hidden', s === 'menu');
     ui.powerups.classList.toggle('hidden', s === 'menu');
     ui.btnPause.classList.toggle('hidden', s !== 'playing');
-    ui.btnDash.classList.toggle('hidden', !(s === 'playing' && input.touchMode));
     ui.tuto.classList.toggle('hidden', !(s === 'playing' && game.tuto.active));
     if (s !== 'playing') ui.toast.classList.add('hidden');
     updateJoystickHome();
@@ -1490,7 +1482,7 @@
 
   // Le HUD n'est modifié que si une valeur change (évite du travail inutile)
   const hudCache = {
-    score: null, best: null, level: null, dashReady: null,
+    score: null, best: null, level: null,
     comboVisible: null, comboMult: null, comboSteps: null, comboRatio: null,
     slotLabel: null, slotBar: null, slotRatio: null,
   };
@@ -1536,11 +1528,6 @@
       if (r !== hudCache.slotRatio) { ui.hudBarFill.style.transform = 'scaleX(' + r + ')'; hudCache.slotRatio = r; }
     }
     if (!ui.toast.classList.contains('hidden')) placeToast();
-    const dashReady = !game.player || game.player.dashCooldown <= 0;
-    if (dashReady !== hudCache.dashReady) {
-      ui.btnDash.classList.toggle('cooldown', !dashReady);
-      hudCache.dashReady = dashReady;
-    }
 
     // Combo : multiplicateur, progression vers le suivant et temps restant
     const c = game.combo;
@@ -1774,6 +1761,7 @@
       b.addEventListener('click', function () {
         settings.joystick = b.getAttribute('data-size');
         saveSettings();
+        resize(); // la zone de jeu laisse la place au joystick
         updateJoystickHome();
         buildSettings();
         Sound.click();
@@ -2065,8 +2053,8 @@
   function showTutoStep() {
     const touch = input.touchMode;
     const texts = [
-      touch ? 'Pose le pouce n\'importe où et pousse pour te déplacer' : 'Déplace-toi avec les flèches, ZQSD ou la souris',
-      touch ? 'Touche DASH (ou tape avec un 2ᵉ doigt) pour foncer, invincible' : 'Appuie sur Espace pour faire un dash (invincible)',
+      touch ? 'Pose le pouce sur le joystick en bas et pousse pour te déplacer' : 'Déplace-toi avec les flèches, ZQSD ou la souris',
+      touch ? 'Tape n\'importe où sur l\'écran pour faire un dash (invincible)' : 'Appuie sur Espace pour faire un dash (invincible)',
       'Attrape l\'énergie jaune : +100 points et dash rechargé',
     ];
     ui.tutoStep.textContent = 'Tutoriel · étape ' + (game.tuto.step + 1) + '/3';
@@ -3413,9 +3401,9 @@
     let kx;
     let ky;
     let alpha;
+    bx = input.joyHome.x;
+    by = input.joyHome.y;
     if (ptr.active && ptr.type === 'touch') {
-      bx = ptr.baseX;
-      by = ptr.baseY;
       const dx = ptr.fingerX - bx;
       const dy = ptr.fingerY - by;
       const len = Math.hypot(dx, dy);
@@ -3424,10 +3412,10 @@
       ky = by + dy * k;
       alpha = 1;
     } else {
-      // Repère discret : montre où poser le pouce
-      bx = kx = input.joyHome.x;
-      by = ky = input.joyHome.y;
-      alpha = 0.35;
+      // Au repos : montre où poser le pouce
+      kx = bx;
+      ky = by;
+      alpha = 0.45;
     }
     ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
     // Socle
@@ -4188,12 +4176,6 @@
     bindButton('btn-menu', function () { Sound.click(); goToMenu(); });
     bindButton('btn-pause', pauseGame);
     bindButton('btn-sound', toggleMute);
-
-    ui.btnDash.addEventListener('pointerdown', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      requestDash();
-    });
 
     // Clavier
     window.addEventListener('keydown', onKeyDown);

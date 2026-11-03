@@ -301,36 +301,9 @@ body {
 }
 
 .icon-btn:focus-visible,
-.btn:focus-visible,
-#btn-dash:focus-visible {
+.btn:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 3px;
-}
-
-/* ---------- Bouton DASH (tactile) ---------- */
-#btn-dash {
-  position: absolute;
-  z-index: 4;
-  right: max(20px, env(safe-area-inset-right));
-  bottom: max(24px, env(safe-area-inset-bottom));
-  width: 84px;
-  height: 84px;
-  border-radius: 50%;
-  border: 2px solid var(--cyan);
-  background: rgba(62, 242, 255, 0.12);
-  color: var(--cyan);
-  font: 800 15px var(--font);
-  letter-spacing: 0.08em;
-  touch-action: none;
-  transition: opacity 0.15s, background 0.15s;
-}
-
-#btn-dash:active {
-  background: rgba(62, 242, 255, 0.35);
-}
-
-#btn-dash.cooldown {
-  opacity: 0.35;
 }
 
 /* ---------- Écrans (menu, pause, fin de partie) ---------- */
