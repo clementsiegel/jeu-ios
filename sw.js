@@ -12,7 +12,7 @@
    utilisée au lancement suivant.
    ====================================================================== */
 
-const VERSION = 'eclats-neon-1.9.1'; // même numéro que GAME_VERSION dans game.js
+const VERSION = 'eclats-neon-2.0'; // même numéro que GAME_VERSION dans game.js
 
 // Tous les fichiers nécessaires pour jouer
 const FILES = [
