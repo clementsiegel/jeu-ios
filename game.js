@@ -284,6 +284,7 @@
     STORAGE_KEY_STATS: 'eclatsNeon.stats',
     STORAGE_KEY_THEME: 'eclatsNeon.theme',
     STORAGE_KEY_TIPS: 'eclatsNeon.astuces',    // astuces déjà vues (une seule fois chacune)
+    STORAGE_KEY_INSTALL: 'eclatsNeon.installVu', // carte "Installe le jeu" déjà fermée
     // Changer ce numéro efface la progression de TOUS les joueurs
     // (records, points, vaisseaux, succès) au lancement suivant. Le réglage du son est gardé.
     DATA_VERSION: '2',
@@ -2129,6 +2130,7 @@
     refreshShipGoal();
     $('menu-info-ach').textContent = unlockedCount() + ' / ' + ACHIEVEMENTS.length;
     buildMissionsPanel();
+    refreshInstallCard();
     refreshUpdateBar();
   }
 
@@ -2365,6 +2367,7 @@
     const planned = storage.get(CONFIG.STORAGE_KEY_TUTO, '') !== '1';
     ui.btnTutoAgain.textContent = planned ? 'Prévu' : 'Revoir';
     ui.setTips.checked = settings.tips;
+    refreshInstallSetting();
     ui.btnTipsAgain.textContent = Object.keys(tips.seen).length ? 'Revoir' : 'Prévu';
   }
 
@@ -6323,6 +6326,7 @@
     bindButton('btn-tuto-skip', finishTutorial);
     bindSettings();
     bindLeaderboard();
+    bindInstall();
     applyReduceFx();
     bindButton('btn-resume', resumeGame);
     bindButton('btn-quit', function () { Sound.click(); goToMenu(); });
@@ -6389,6 +6393,104 @@
 
     setupOfflineMode();
     requestAnimationFrame(frame);
+  }
+
+  // --- Installer le jeu sur l'écran d'accueil ---
+  // iPhone / iPad (Safari) : carte avec un schéma "Partager, puis Sur l'écran d'accueil".
+  // Android / Chrome : bouton "Installer" (événement beforeinstallprompt).
+  // La carte n'apparaît qu'une fois, et jamais quand le jeu est déjà installé.
+  const install = { prompt: null };
+
+  function isInstalled() {
+    if (navigator.standalone === true) return true;
+    const mm = window.matchMedia;
+    return !!(mm && (mm('(display-mode: standalone)').matches || mm('(display-mode: fullscreen)').matches));
+  }
+
+  function isIosSafari() {
+    const ua = navigator.userAgent || '';
+    const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    return ios && /Safari\//.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA\/|FBAN|FBAV|Instagram|Line\//.test(ua);
+  }
+
+  // 'ios', 'prompt' (bouton Installer) ou '' (rien à proposer)
+  function installKind() {
+    if (isInstalled()) return '';
+    if (install.prompt) return 'prompt';
+    if (isIosSafari()) return 'ios';
+    return '';
+  }
+
+  function refreshInstallCard() {
+    const kind = installKind();
+    const seen = storage.get(CONFIG.STORAGE_KEY_INSTALL, '') === '1';
+    $('install-card').classList.toggle('hidden', !kind || seen);
+    $('install-ios').classList.toggle('hidden', kind !== 'ios');
+    $('install-android').classList.toggle('hidden', kind !== 'prompt');
+    $('btn-install').classList.toggle('hidden', kind !== 'prompt');
+    $('btn-install-ok').textContent = kind === 'prompt' ? 'Plus tard' : 'Compris';
+  }
+
+  function closeInstallCard() {
+    storage.set(CONFIG.STORAGE_KEY_INSTALL, '1');
+    refreshInstallCard();
+    Sound.click();
+  }
+
+  function askInstall() {
+    const prompt = install.prompt;
+    if (!prompt) return;
+    install.prompt = null; // le navigateur ne permet de le demander qu'une fois
+    try {
+      prompt.prompt();
+      if (prompt.userChoice) {
+        prompt.userChoice.then(function (choice) {
+          if (choice && choice.outcome === 'accepted') storage.set(CONFIG.STORAGE_KEY_INSTALL, '1');
+          refreshInstallCard();
+          refreshInstallSetting();
+        }, function () {});
+      }
+    } catch (e) { /* refusé par le navigateur */ }
+    refreshInstallCard();
+    refreshInstallSetting();
+  }
+
+  // Ligne "Installer le jeu" des réglages
+  function refreshInstallSetting() {
+    const kind = installKind();
+    $('install-setting').classList.toggle('hidden', isInstalled());
+    $('btn-install-again').classList.toggle('hidden', !kind);
+    $('btn-install-again').textContent = kind === 'prompt' ? 'Installer' : 'Voir';
+    $('install-setting-text').textContent = kind
+      ? 'Plein écran, et il marche sans internet'
+      : 'Dans le menu de ton navigateur : « Installer » ou « Ajouter à l\'écran d\'accueil »';
+  }
+
+  function bindInstall() {
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault(); // on affiche notre propre bouton "Installer"
+      install.prompt = e;
+      refreshInstallCard();
+      refreshInstallSetting();
+    });
+    window.addEventListener('appinstalled', function () {
+      install.prompt = null;
+      storage.set(CONFIG.STORAGE_KEY_INSTALL, '1');
+      refreshInstallCard();
+      refreshInstallSetting();
+    });
+    bindButton('btn-install', askInstall);
+    bindButton('btn-install-ok', closeInstallCard);
+    bindButton('btn-install-again', function () {
+      if (installKind() === 'prompt') {
+        askInstall();
+        return;
+      }
+      // Revoir la carte : retour au menu, carte affichée
+      try { window.localStorage.removeItem(CONFIG.STORAGE_KEY_INSTALL); } catch (e) { /* stockage bloqué */ }
+      backToMenu();
+      $('install-card').scrollIntoView({ block: 'center' });
+    });
   }
 
   // --- Mise à jour du jeu ---

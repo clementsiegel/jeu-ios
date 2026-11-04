@@ -124,6 +124,35 @@
           </button>
         </nav>
 
+        <!-- Installer le jeu sur l'écran d'accueil (affiché une seule fois, par game.js) -->
+        <section id="install-card" class="install-card hidden" aria-labelledby="install-title">
+          <h2 id="install-title" class="install-title">Installe le jeu</h2>
+          <!-- iPhone et iPad (Safari) : schéma des 2 étapes -->
+          <div id="install-ios">
+            <p class="install-text">Pour jouer en plein écran : <b>Partager</b>, puis <b>Sur l'écran d'accueil</b>.</p>
+            <div class="install-steps" aria-hidden="true">
+              <span class="install-step">
+                <span class="install-num">1</span>
+                <svg viewBox="0 0 32 32"><path d="M11 13H8v14h16V13h-3"/><path d="M16 20V4M10.5 9.5 16 4l5.5 5.5"/></svg>
+                <small>Partager</small>
+              </span>
+              <svg class="install-arrow" viewBox="0 0 16 32"><path d="M4 9l8 7-8 7"/></svg>
+              <span class="install-step">
+                <span class="install-num">2</span>
+                <svg viewBox="0 0 32 32"><rect x="5" y="5" width="22" height="22" rx="4"/><path d="M16 10.5v11M10.5 16h11"/></svg>
+                <small>Sur l'écran d'accueil</small>
+              </span>
+            </div>
+            <p class="install-note">Pas de bouton Partager en bas ? Il est dans le menu&nbsp;«&nbsp;⋯&nbsp;».</p>
+          </div>
+          <!-- Android et Chrome : bouton "Installer" -->
+          <p id="install-android" class="install-text hidden">Il s'ouvre en plein écran et marche même sans internet.</p>
+          <div class="install-actions">
+            <button type="button" id="btn-install" class="btn btn-small btn-primary hidden">Installer</button>
+            <button type="button" id="btn-install-ok" class="btn btn-small">Compris</button>
+          </div>
+        </section>
+
         <div class="scoreboard">
           <div><span class="sb-label">Record</span><strong id="menu-best">0</strong></div>
           <div><span class="sb-label">Défi du jour</span><strong id="menu-daily" class="daily-best">0</strong></div>
@@ -413,6 +442,10 @@
           <div class="setting">
             <span class="setting-name">Tutoriel</span>
             <button type="button" id="btn-tuto-again" class="btn btn-small">Revoir</button>
+          </div>
+          <div class="setting" id="install-setting">
+            <span class="setting-name">Installer le jeu <small id="install-setting-text">Plein écran, et il marche sans internet</small></span>
+            <button type="button" id="btn-install-again" class="btn btn-small">Voir</button>
           </div>
           <label class="setting setting-check">
             <span class="setting-name">Astuces <small>Une bulle explique chaque nouveauté, une seule fois</small></span>
