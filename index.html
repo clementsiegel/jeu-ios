@@ -177,7 +177,7 @@
                 <span class="action">Se déplacer</span>
               </div>
               <div class="ctrl-row">
-                <span class="keys">Tape l'écran, ou un 2ᵉ doigt</span>
+                <span class="keys" id="howto-dash">Tape l'écran, ou un 2ᵉ doigt</span>
                 <span class="action">Dash (invincible un instant)</span>
               </div>
               <div class="ctrl-row">
@@ -450,6 +450,14 @@
               <button type="button" data-size="small">Petit</button>
               <button type="button" data-size="medium">Moyen</button>
               <button type="button" data-size="large">Grand</button>
+            </div>
+          </div>
+          <div class="setting setting-stack">
+            <span class="setting-name">Dash au toucher <small id="set-dash-help">Une tape rapide sur l'écran fait un dash. Un 2ᵉ doigt aussi.</small></span>
+            <div class="segmented" id="set-dash" role="group" aria-label="Dash au toucher">
+              <button type="button" data-dash="tap">Tape</button>
+              <button type="button" data-dash="second">2ᵉ doigt</button>
+              <button type="button" data-dash="double">Double tape</button>
             </div>
           </div>
           <label class="setting setting-check">

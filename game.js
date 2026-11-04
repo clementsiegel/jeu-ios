@@ -63,6 +63,8 @@
     JOYSTICK_MARGIN: 20,     // espace sous le joystick "repère" (en plus de la barre du bas des iPhone)
     TAP_TIME: 220,           // un doigt levé avant ce délai (ms)...
     TAP_MOVE: 14,            // ...et qui a bougé de moins de 14 px = une tape = un dash
+    DOUBLE_TAP_TIME: 400,    // réglage "Double tape" : 2 tapes en moins de 400 ms...
+    DOUBLE_TAP_DIST: 70,     // ...à moins de 70 px l'une de l'autre
     DASH_SPEED: 1150,
     DASH_DURATION: 0.17,     // secondes d'invincibilité pendant le dash
     DASH_COOLDOWN: 1.1,      // secondes avant de pouvoir refaire un dash
@@ -681,10 +683,30 @@
   // --- Réglages du joueur ---
   const JOYSTICK_SIZES = { small: 48, medium: CONFIG.JOYSTICK_RADIUS, large: 74 };
 
+  // Dash au toucher : textes du réglage, du tutoriel et de "Comment jouer"
+  // (le 2e doigt, la barre Espace et le clic droit font toujours un dash)
+  const DASH_MODES = {
+    tap: {
+      help: 'Une tape rapide sur l\'écran fait un dash. Un 2ᵉ doigt aussi.',
+      tuto: 'Tape l\'écran (ou avec un 2ᵉ doigt) pour faire un dash, invincible',
+      howto: 'Tape l\'écran, ou un 2ᵉ doigt',
+    },
+    second: {
+      help: 'Seulement avec un 2ᵉ doigt : plus de dash par accident.',
+      tuto: 'Pose un 2ᵉ doigt sur l\'écran pour faire un dash, invincible',
+      howto: 'Un 2ᵉ doigt sur l\'écran',
+    },
+    double: {
+      help: 'Tape deux fois vite sur l\'écran pour un dash. Un 2ᵉ doigt aussi.',
+      tuto: 'Tape deux fois vite l\'écran (ou un 2ᵉ doigt) pour faire un dash, invincible',
+      howto: 'Tape deux fois l\'écran, ou un 2ᵉ doigt',
+    },
+  };
+
   // Réglages vérifiés un par un : une valeur absente ou bizarre reprend sa valeur par défaut
   // (sert aussi pour les codes de sauvegarde importés)
   function sanitizeSettings(data) {
-    const s = { music: 60, sfx: 100, joystick: 'medium', reduceFx: false, difficulty: 'normal', tips: true };
+    const s = { music: 60, sfx: 100, joystick: 'medium', reduceFx: false, difficulty: 'normal', tips: true, dash: 'tap' };
     if (isPlainObject(data)) {
       if (Number.isFinite(data.music)) s.music = clamp(Math.round(data.music), 0, 100);
       if (Number.isFinite(data.sfx)) s.sfx = clamp(Math.round(data.sfx), 0, 100);
@@ -692,6 +714,7 @@
       s.reduceFx = data.reduceFx === true;
       if (has(DIFFICULTY, data.difficulty)) s.difficulty = data.difficulty;
       if (typeof data.tips === 'boolean') s.tips = data.tips;
+      if (has(DASH_MODES, data.dash)) s.dash = data.dash;
     }
     return s;
   }
@@ -1619,6 +1642,7 @@
       moved: 0,               // distance maximale parcourue depuis
     },
     joyHome: { x: 0, y: 0 },  // joystick "repère" en bas au milieu, quand on ne touche pas l'écran
+    lastTap: { at: 0, x: 0, y: 0 }, // dernière tape (réglage "Double tape")
   };
 
   const MOVE_KEYS = {
@@ -1801,13 +1825,32 @@
   function onPointerEnd(e) {
     const ptr = input.pointer;
     if (e.pointerId !== ptr.id) return;
-    // Tape rapide sans glisser = dash
+    // Tape rapide sans glisser
     if (e.type === 'pointerup' && ptr.type === 'touch' &&
         performance.now() - ptr.downAt <= CONFIG.TAP_TIME && ptr.moved <= CONFIG.TAP_MOVE) {
-      requestDash();
+      onTap(ptr.startX, ptr.startY);
     }
     ptr.active = false;
     ptr.id = null;
+  }
+
+  // Une tape sur l'écran : dash selon le réglage "Dash au toucher"
+  function onTap(x, y) {
+    if (settings.dash === 'tap') {
+      requestDash();
+    } else if (settings.dash === 'double') {
+      const last = input.lastTap;
+      const now = performance.now();
+      if (now - last.at <= CONFIG.DOUBLE_TAP_TIME && Math.hypot(x - last.x, y - last.y) <= CONFIG.DOUBLE_TAP_DIST) {
+        last.at = 0;
+        requestDash();
+      } else {
+        last.at = now;
+        last.x = x;
+        last.y = y;
+      }
+    }
+    // 'second' : une tape ne fait rien, seul le 2e doigt fait un dash
   }
 
   // Joystick : direction et force (0 à 1) selon la distance du pouce au centre
@@ -1870,6 +1913,8 @@
     streak: $('streak'),
     statsGrid: $('stats-grid'),
     setDifficulty: $('set-difficulty'),
+    setDash: $('set-dash'),
+    setDashHelp: $('set-dash-help'),
     goStreak: $('go-streak'),
     goMore: $('btn-go-more'),
     goProgress: $('go-progress'),
@@ -2146,6 +2191,7 @@
     $('menu-info-ach').textContent = unlockedCount() + ' / ' + ACHIEVEMENTS.length;
     buildMissionsPanel();
     refreshInstallCard();
+    refreshDashHelp();
     refreshUpdateBar();
   }
 
@@ -2378,6 +2424,12 @@
       b.classList.toggle('active', on);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
+    for (const b of ui.setDash.querySelectorAll('button')) {
+      const on = b.getAttribute('data-dash') === settings.dash;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    ui.setDashHelp.textContent = DASH_MODES[settings.dash].help;
     ui.setReduce.checked = settings.reduceFx;
     const planned = storage.get(CONFIG.STORAGE_KEY_TUTO, '') !== '1';
     ui.btnTutoAgain.textContent = planned ? 'Prévu' : 'Revoir';
@@ -2444,6 +2496,15 @@
         Sound.click();
       });
     }
+    for (const b of ui.setDash.querySelectorAll('button')) {
+      b.addEventListener('click', function () {
+        settings.dash = b.getAttribute('data-dash');
+        saveSettings();
+        buildSettings();
+        refreshDashHelp();
+        Sound.click();
+      });
+    }
     ui.setTips.addEventListener('change', function () {
       settings.tips = ui.setTips.checked;
       saveSettings();
@@ -2462,6 +2523,11 @@
       buildSettings();
       Sound.click();
     });
+  }
+
+  // "Comment jouer" : la ligne du dash suit le réglage
+  function refreshDashHelp() {
+    $('howto-dash').textContent = DASH_MODES[settings.dash].howto;
   }
 
   // Prochain vaisseau à débloquer (dans l'ordre)
@@ -3850,7 +3916,7 @@
     const touch = input.touchMode;
     const texts = [
       touch ? 'Pose le pouce n\'importe où et pousse pour te déplacer' : 'Déplace-toi avec les flèches, ZQSD ou la souris',
-      touch ? 'Tape l\'écran (ou avec un 2ᵉ doigt) pour faire un dash, invincible' : 'Appuie sur Espace pour faire un dash (invincible)',
+      touch ? (DASH_MODES[settings.dash] || DASH_MODES.tap).tuto : 'Appuie sur Espace pour faire un dash (invincible)',
       'Attrape l\'énergie jaune : +100 points et dash rechargé',
     ];
     ui.tutoStep.textContent = 'Tutoriel · étape ' + (game.tuto.step + 1) + '/3';
