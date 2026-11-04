@@ -11,6 +11,8 @@
 --
 -- Modes du classement : normal, daily (défi du jour), timeattack (60 s),
 -- bossrush (Boss Rush) et chaos (Chaos).
+-- Tous les classements montrent le meilleur score de chaque joueur, tous
+-- temps confondus (au défi du jour : tous jours confondus).
 --
 -- Pour modérer (pseudo méchant, score truqué) : "Table Editor", table
 -- "joueurs". Supprimer une ligne efface le joueur et tous ses scores.
@@ -103,6 +105,24 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------
+-- Le meilleur score de chaque joueur, tous temps confondus (un seul par
+-- joueur). Pour le défi du jour, c'est son meilleur score de tous les jours.
+-- Fonction interne : le jeu ne l'appelle pas directement.
+-- ---------------------------------------------------------------------
+create or replace function public.meilleurs_scores(p_mode text)
+returns table (joueur uuid, score integer, le timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select distinct on (s.joueur) s.joueur, s.score, s.le
+  from scores s
+  where s.mode = p_mode
+  order by s.joueur, s.score desc, s.le asc;
+$$;
+
+-- ---------------------------------------------------------------------
 -- Envoyer un score (garde seulement le meilleur) et renvoyer sa place
 -- ---------------------------------------------------------------------
 create or replace function public.envoyer_score(
@@ -119,10 +139,15 @@ set search_path = public
 as $$
 declare
   v_jour text := '';
+  v_date date;
   v_score integer;
   v_le timestamptz;
   v_rang integer;
   v_total integer;
+  v_best integer;
+  v_best_le timestamptz;
+  v_rang_all integer;
+  v_total_all integer;
 begin
   if p_joueur is null then
     raise exception 'joueur_invalide';
@@ -134,11 +159,18 @@ begin
     raise exception 'score_invalide';
   end if;
   if p_mode = 'daily' then
-    -- Seulement le défi d'aujourd'hui (un jour d'écart permis pour les fuseaux horaires)
+    -- Une vraie date, pas dans le futur (un jour d'avance permis pour les fuseaux
+    -- horaires) et pas plus vieille de 400 jours : ça permet de reprendre le
+    -- dernier record de défi déjà présent sur un téléphone.
     if coalesce(p_jour, '') !~ '^\d{4}-\d{2}-\d{2}$' then
       raise exception 'jour_invalide';
     end if;
-    if abs(p_jour::date - current_date) > 1 then
+    begin
+      v_date := p_jour::date;
+    exception when others then
+      raise exception 'jour_invalide';
+    end;
+    if v_date > current_date + 1 or v_date < current_date - 400 then
       raise exception 'jour_invalide';
     end if;
     v_jour := p_jour;
@@ -167,12 +199,32 @@ begin
   from scores s
   where s.mode = p_mode and s.jour = v_jour;
 
-  return json_build_object('rang', v_rang, 'total', v_total, 'meilleur', v_score);
+  -- Place dans le classement "tous les temps" (le meilleur score de chaque joueur)
+  select m.score, m.le into v_best, v_best_le
+  from public.meilleurs_scores(p_mode) m
+  where m.joueur = p_joueur;
+
+  select count(*) + 1 into v_rang_all
+  from public.meilleurs_scores(p_mode) m
+  where m.score > v_best or (m.score = v_best and m.le < v_best_le);
+
+  select count(*) into v_total_all
+  from public.meilleurs_scores(p_mode);
+
+  -- rang / total / meilleur : place du jour (défi du jour) ou du classement (autres modes)
+  -- rang_global / total_global / meilleur_global : place "tous les temps"
+  return json_build_object(
+    'rang', v_rang, 'total', v_total, 'meilleur', v_score,
+    'rang_global', v_rang_all, 'total_global', v_total_all, 'meilleur_global', v_best
+  );
 end;
 $$;
 
 -- ---------------------------------------------------------------------
--- Lire le classement : les premiers, plus la ligne du joueur s'il est plus bas
+-- Lire le classement : les premiers, plus la ligne du joueur s'il est plus bas.
+-- Sans jour (p_jour vide) : "tous les temps", le meilleur score de chaque joueur
+-- (c'est ce que le jeu demande, pour tous les modes). Avec un jour : le
+-- classement de ce défi du jour seulement (utilisé par les anciennes versions).
 -- ---------------------------------------------------------------------
 create or replace function public.voir_classement(
   p_mode text,
@@ -186,17 +238,27 @@ stable
 security definer
 set search_path = public
 as $$
-  with tri as (
-    select
-      row_number() over (order by s.score desc, s.le asc) as r,
-      j.pseudo as nom,
-      s.score as pts,
-      coalesce(s.joueur = p_joueur, false) as est_moi,
-      count(*) over () as nb
+  with base as (
+    select m.joueur, m.score, m.le
+    from public.meilleurs_scores(p_mode) m
+    where case when p_mode = 'daily' then coalesce(p_jour, '') else '' end = ''
+    union all
+    select s.joueur, s.score, s.le
     from scores s
-    join joueurs j on j.id = s.joueur
     where s.mode = p_mode
-      and s.jour = case when p_mode = 'daily' then coalesce(p_jour, '') else '' end
+      and p_mode = 'daily'
+      and coalesce(p_jour, '') <> ''
+      and s.jour = p_jour
+  ),
+  tri as (
+    select
+      row_number() over (order by b.score desc, b.le asc) as r,
+      j.pseudo as nom,
+      b.score as pts,
+      coalesce(b.joueur = p_joueur, false) as est_moi,
+      count(*) over () as nb
+    from base b
+    join joueurs j on j.id = b.joueur
   )
   select t.r, t.nom, t.pts, t.est_moi, t.nb
   from tri t
@@ -208,6 +270,7 @@ $$;
 -- Droits : le jeu (clé publique) peut seulement appeler ces 3 fonctions
 -- ---------------------------------------------------------------------
 revoke all on function public.pseudo_valide(text) from public, anon, authenticated;
+revoke all on function public.meilleurs_scores(text) from public, anon, authenticated;
 revoke all on function public.choisir_pseudo(uuid, text) from public;
 revoke all on function public.envoyer_score(uuid, text, text, text, integer) from public;
 revoke all on function public.voir_classement(text, text, uuid, integer) from public;

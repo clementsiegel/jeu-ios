@@ -29,7 +29,7 @@
   // Version du jeu, affichée dans les Réglages. À augmenter à chaque mise à jour :
   // grosse mise à jour 1.8 -> 1.9, petite correction 1.8 -> 1.81 -> 1.82.
   // Penser à mettre la même dans VERSION, en haut de sw.js (mode hors ligne).
-  const GAME_VERSION = '2.3';
+  const GAME_VERSION = '2.3.1';
 
   // --- Classement en ligne (Supabase) ---
   // Les 2 codes se trouvent dans Supabase, bouton "Connect" du projet
@@ -2998,12 +2998,20 @@
     storage.set(CONFIG.STORAGE_KEY_PENDING, JSON.stringify(pending));
   }
 
+  // Le serveur accepte un score de défi du jour jusqu'à 400 jours en arrière
+  // (même valeur dans classement-supabase.sql) : date la plus ancienne, ex. "2025-09-30"
+  function oldestDailyKey() {
+    const d = new Date();
+    d.setDate(d.getDate() - 400);
+    return dateKey(d);
+  }
+
   // Retient qu'un score est bien arrivé au classement (pour ne pas le renvoyer à chaque lancement)
   function markSynced(key, score) {
     const done = loadJSON(CONFIG.STORAGE_KEY_SYNCED, {});
-    const todayDaily = boardKey('daily', todayKey());
+    const oldest = oldestDailyKey();
     for (const k of Object.keys(done)) {
-      if (k.indexOf('daily|') === 0 && k !== todayDaily) delete done[k]; // vieux défis : inutile de les garder
+      if (k.indexOf('daily|') === 0 && k.slice(6) < oldest) delete done[k]; // trop vieux pour le serveur
     }
     if (!(score <= (done[key] || 0))) done[key] = score;
     storage.set(CONFIG.STORAGE_KEY_SYNCED, JSON.stringify(done));
@@ -3016,13 +3024,16 @@
   function syncExistingRecords() {
     if (!online.enabled) return;
     const done = loadJSON(CONFIG.STORAGE_KEY_SYNCED, {});
-    const today = todayKey();
+    // Défi du jour : l'appareil ne garde que le dernier record, avec sa date ({ date, best })
+    const daily = loadJSON(CONFIG.STORAGE_KEY_DAILY, null);
+    const dailyOk = daily && /^\d{4}-\d{2}-\d{2}$/.test(String(daily.date)) &&
+      daily.date >= oldestDailyKey() && Number.isFinite(daily.best);
     const records = [
       ['normal', game.best, ''],
       ['timeattack', game.bestTA, ''],
       ['bossrush', game.modeRecords.bossrush || 0, ''],
       ['chaos', game.modeRecords.chaos || 0, ''],
-      ['daily', loadDailyBest(today), today], // seulement le défi d'aujourd'hui (le serveur refuse les autres)
+      ['daily', dailyOk ? Math.floor(daily.best) : 0, dailyOk ? daily.date : ''],
     ];
     for (const r of records) {
       if (r[1] > 0 && !(r[1] <= (done[boardKey(r[0], r[2])] || 0))) queueOnlineScore(r[0], r[1], r[2]);
@@ -3106,8 +3117,12 @@
       if (token !== online.goToken) return;
       const res = out.results[key];
       if (res && res.rang) {
-        ui.goRank.textContent = (mode === 'daily' ? 'Classement du jour : ' : 'Classement : ') +
-          ordinal(res.rang) + ' sur ' + res.total;
+        // Partout, la place "tous les temps" (au défi du jour aussi). Sur une base dont le
+        // script SQL n'est pas à jour, il n'y a que la place du jour pour le défi.
+        const allTime = mode !== 'daily' || !!res.rang_global;
+        const rank = mode === 'daily' && res.rang_global ? res.rang_global : res.rang;
+        const total = mode === 'daily' && res.rang_global ? res.total_global : res.total;
+        ui.goRank.textContent = (allTime ? 'Classement : ' : 'Classement du jour : ') + ordinal(rank) + ' sur ' + total;
       } else if (!getPseudo()) {
         showGameOverRank(); // le pseudo était pris : on en redemande un
         ui.goPseudoMsg.textContent = 'Ton pseudo est déjà pris, choisis-en un autre';
@@ -3134,11 +3149,11 @@
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
     const subs = {
-      normal: 'Le meilleur score de chaque joueur',
-      daily: 'Défi du ' + formatToday() + ' : les mêmes vagues pour tout le monde',
-      timeattack: 'Contre-la-montre : 60 secondes',
-      bossrush: 'Boss Rush : les boss à la suite',
-      chaos: 'Chaos : tout va plus vite',
+      normal: 'Normal : le meilleur score de chaque joueur',
+      daily: 'Défi du jour : le meilleur score de chaque joueur, tous les jours confondus',
+      timeattack: 'Contre-la-montre 60 s : le meilleur score de chaque joueur',
+      bossrush: 'Boss Rush : le meilleur score de chaque joueur',
+      chaos: 'Chaos : le meilleur score de chaque joueur',
     };
     ui.lbSub.textContent = subs[online.tab];
     showLbPseudo(false);
@@ -3170,7 +3185,8 @@
     flushOnlineScores().then(function () {
       if (token !== online.lbToken) return null;
       return onlineCall('voir_classement', {
-        p_mode: mode, p_jour: mode === 'daily' ? todayKey() : '', p_joueur: playerId(), p_nombre: LB_SIZE,
+        // p_jour vide = "tous les temps" : le meilleur score de chaque joueur, pour tous les modes
+        p_mode: mode, p_jour: '', p_joueur: playerId(), p_nombre: LB_SIZE,
       });
     }).then(function (rows) {
       if (token === online.lbToken && rows) renderLeaderboard(rows);
