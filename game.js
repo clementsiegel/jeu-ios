@@ -1664,9 +1664,11 @@
     Sound.unlock();
     const code = e.code;
 
-    // Si un bouton a le focus, Entrée et Espace l'activent normalement
-    const onButton = e.target && e.target.closest && e.target.closest('button');
+    // Si un bouton (ou une case à cocher) a le focus, Entrée et Espace l'activent normalement
+    const onButton = e.target && e.target.closest && e.target.closest('button, input[type="checkbox"]');
     if (onButton && (code === 'Enter' || code === 'NumpadEnter' || code === 'Space')) return;
+    // Les flèches règlent le curseur de volume qui a le focus
+    if (e.target && e.target.type === 'range' && code.indexOf('Arrow') === 0) return;
 
     if (BLOCKED_KEYS.has(code)) e.preventDefault();
     input.keys.add(code);
@@ -1907,6 +1909,11 @@
     setSfxVal: $('set-sfx-val'),
     setJoystick: $('set-joystick'),
     setReduce: $('set-reduce'),
+    pauseMusic: $('pause-music'),
+    pauseMusicVal: $('pause-music-val'),
+    pauseSfx: $('pause-sfx'),
+    pauseSfxVal: $('pause-sfx-val'),
+    pauseReduce: $('pause-reduce'),
     btnTutoAgain: $('btn-tuto-again'),
     goOnline: $('go-online'),
     goRankRow: $('go-rank-row'),
@@ -2384,20 +2391,41 @@
     document.documentElement.classList.toggle('reduce-fx', settings.reduceFx);
   }
 
+  // Réglages rapides de l'écran pause : les mêmes valeurs que dans Réglages
+  function buildPauseSettings() {
+    ui.pauseMusic.value = settings.music;
+    ui.pauseMusicVal.textContent = settings.music;
+    ui.pauseSfx.value = settings.sfx;
+    ui.pauseSfxVal.textContent = settings.sfx;
+    ui.pauseReduce.checked = settings.reduceFx;
+  }
+
+  // Curseur de volume (musique ou effets), dans Réglages ou dans la pause
+  function bindVolume(input, output, key) {
+    input.addEventListener('input', function () {
+      settings[key] = clamp(Math.round(Number(input.value) || 0), 0, 100);
+      output.textContent = settings[key];
+      Sound.applyVolumes();
+      saveSettings();
+    });
+    if (key === 'sfx') input.addEventListener('change', function () { Sound.unlock(); Sound.collect(); }); // aperçu du volume
+  }
+
+  function bindReduceFx(box) {
+    box.addEventListener('change', function () {
+      settings.reduceFx = box.checked;
+      saveSettings();
+      applyReduceFx();
+    });
+  }
+
   function bindSettings() {
-    ui.setMusic.addEventListener('input', function () {
-      settings.music = Number(ui.setMusic.value);
-      ui.setMusicVal.textContent = settings.music;
-      Sound.applyVolumes();
-      saveSettings();
-    });
-    ui.setSfx.addEventListener('input', function () {
-      settings.sfx = Number(ui.setSfx.value);
-      ui.setSfxVal.textContent = settings.sfx;
-      Sound.applyVolumes();
-      saveSettings();
-    });
-    ui.setSfx.addEventListener('change', function () { Sound.unlock(); Sound.collect(); }); // aperçu du volume
+    bindVolume(ui.setMusic, ui.setMusicVal, 'music');
+    bindVolume(ui.setSfx, ui.setSfxVal, 'sfx');
+    bindVolume(ui.pauseMusic, ui.pauseMusicVal, 'music');
+    bindVolume(ui.pauseSfx, ui.pauseSfxVal, 'sfx');
+    bindReduceFx(ui.setReduce);
+    bindReduceFx(ui.pauseReduce);
     for (const b of ui.setJoystick.querySelectorAll('button')) {
       b.addEventListener('click', function () {
         settings.joystick = b.getAttribute('data-size');
@@ -2416,11 +2444,6 @@
         Sound.click();
       });
     }
-    ui.setReduce.addEventListener('change', function () {
-      settings.reduceFx = ui.setReduce.checked;
-      saveSettings();
-      applyReduceFx();
-    });
     ui.setTips.addEventListener('change', function () {
       settings.tips = ui.setTips.checked;
       saveSettings();
@@ -3579,6 +3602,7 @@
     if (game.state !== 'playing') return;
     input.dashQueued = false;
     setState('paused');
+    buildPauseSettings();
     showScreen('pause');
     Music.want(false);
   }

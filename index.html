@@ -219,7 +219,24 @@
     <section id="screen-pause" class="screen screen-center" aria-labelledby="pause-title">
       <div class="panel panel-small">
         <h2 id="pause-title" class="screen-title pause-title">Pause</h2>
-        <p class="hint">Échap ou P pour reprendre.</p>
+        <p class="hint hide-touch">Échap ou P pour reprendre.</p>
+        <!-- Réglages rapides (les mêmes que dans Réglages) -->
+        <div class="settings pause-settings">
+          <label class="setting">
+            <span class="setting-name">Musique</span>
+            <input type="range" id="pause-music" min="0" max="100" step="5">
+            <output id="pause-music-val">60</output>
+          </label>
+          <label class="setting">
+            <span class="setting-name">Effets sonores</span>
+            <input type="range" id="pause-sfx" min="0" max="100" step="5">
+            <output id="pause-sfx-val">100</output>
+          </label>
+          <label class="setting setting-check">
+            <span class="setting-name">Réduire les effets</span>
+            <input type="checkbox" id="pause-reduce">
+          </label>
+        </div>
         <div class="btn-row">
           <button type="button" id="btn-resume" class="btn btn-primary">Reprendre</button>
           <button type="button" id="btn-quit" class="btn">Menu principal</button>

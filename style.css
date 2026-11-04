@@ -1855,6 +1855,17 @@ kbd {
   color: var(--yellow);
 }
 
+/* Réglages rapides de la pause */
+.pause-settings {
+  margin-top: 16px;
+  gap: 6px;
+  text-align: left;
+}
+
+.pause-settings .setting {
+  padding: 9px 12px;
+}
+
 /* Choix à plusieurs boutons collés (difficulté, joystick, onglets) */
 .segmented {
   display: flex;
@@ -2134,6 +2145,26 @@ kbd {
 
   .gameover-title {
     font-size: 28px;
+  }
+
+  .pause-title {
+    font-size: 34px;
+  }
+
+  .pause-settings {
+    margin-top: 10px;
+  }
+
+  .pause-settings .setting {
+    padding: 6px 12px;
+  }
+
+  #screen-pause .btn-row {
+    margin-top: 12px;
+  }
+
+  #screen-pause .btn-row .btn-primary {
+    flex: 1 1 auto;
   }
 
   .final-score {
