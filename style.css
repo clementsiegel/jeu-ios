@@ -38,6 +38,27 @@
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --radius: 6px;
+  /* Couleurs des dangers dans la légende (les mêmes que dans le jeu) */
+  --c-shard: #ff3d8b;
+  --c-seeker: #ff9d3d;
+  --c-laser: #ff2d6f;
+  --c-mine: #ff4a3d;
+  --c-hole: #ff2dd2;
+  --c-bouncer: #ff7a5c;
+  --c-wall: #ff3d6e;
+  --c-turret: #ffb13d;
+}
+
+/* Mode daltonien : la palette de COLORBLIND_COLORS (game.js) */
+html.colorblind {
+  --c-shard: #ff4fae;
+  --c-seeker: #ff6a00;
+  --c-laser: #ff57e4;
+  --c-mine: #ff6a00;
+  --c-hole: #ff4fd8;
+  --c-bouncer: #ffd0a0;
+  --c-wall: #ff57e4;
+  --c-turret: #ffb000;
 }
 
 *,
@@ -1197,18 +1218,22 @@ kbd {
   height: 12px;
 }
 
-.dot-shard   { background: var(--pink); transform: rotate(45deg) scale(0.85); }
-.dot-seeker  { border: 3px solid var(--orange); border-radius: 50%; }
-.dot-laser   { height: 4px; background: var(--red); }
+.dot-shard   { background: var(--c-shard); transform: rotate(45deg) scale(0.85); }
+.dot-seeker  { border: 3px solid var(--c-seeker); border-radius: 50%; }
+.dot-laser   { height: 4px; background: var(--c-laser); }
 .dot-energy  { background: var(--yellow); transform: rotate(45deg) scale(0.8); }
 .dot-power   { background: linear-gradient(90deg, #4dffa6 0 33%, #b388ff 0 66%, #5c8dff 0); }
 .dot-combo   { background: #f4f0ff; transform: rotate(45deg) scale(0.7); }
-.dot-mine    { background: #ff4a3d; border-radius: 50%; }
-.dot-hole    { border: 3px solid #ff2dd2; border-radius: 50%; background: #05010f; }
+.dot-mine    { background: var(--c-mine); border-radius: 50%; }
+.dot-hole    { border: 3px solid var(--c-hole); border-radius: 50%; background: #05010f; }
 .dot-boss    { background: #ff2d6f; }
-.dot-bouncer { border: 3px solid #ff7a5c; }
-.dot-wall    { width: 5px; height: 14px; margin: 0 4px; background: #ff3d6e; }
-.dot-turret  { background: #ffb13d; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+.dot-bouncer { border: 3px solid var(--c-bouncer); }
+.dot-wall    { width: 5px; height: 14px; margin: 0 4px; background: var(--c-wall); }
+.dot-turret  { background: var(--c-turret); clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+
+/* Mode daltonien : mêmes formes que dans le jeu */
+.colorblind .dot-seeker  { border-style: dashed; }
+.colorblind .dot-bouncer { border-style: double; border-width: 4px; }
 
 .c-shield { color: #4dffa6; }
 .c-slow   { color: #b388ff; }

@@ -301,7 +301,7 @@
     player: '#3ef2ff',
     playerCore: '#eaffff',
     shard: '#ff3d8b',
-    shardFill: 'rgba(255, 61, 139, 0.16)',
+    shardFill: 'rgba(255, 61, 139, 0.16)', // les couleurs "Fill" et "Halo" sont recalculées par applyPalette
     shardHalo: 'rgba(255, 61, 139, 0.28)',
     seeker: '#ff9d3d',
     seekerHalo: 'rgba(255, 157, 61, 0.3)',
@@ -319,7 +319,10 @@
     boss: '#ff2d6f',
     bossCore: '#ffb13d',
     bouncer: '#ff7a5c',
+    bouncerFill: 'rgba(255, 122, 92, 0.16)',
+    bouncerHalo: 'rgba(255, 122, 92, 0.3)',
     wall: '#ff3d6e',
+    wallCore: '#ffd6e2',
     turret: '#ffb13d',
     bullet: '#ffd08a',
     mini: '#7dffea',
@@ -328,6 +331,29 @@
     text: '#e8f7ff',
     white: '#ffffff',
   };
+
+  // Mode daltonien (Réglages) : le rose et l'orange des dangers se ressemblent pour
+  // beaucoup de daltoniens. Cette palette les sépare (vérifié avec une simulation de
+  // protanopie et de deutéranopie) et garde un contraste d'au moins 7:1 sur le fond.
+  // Les formes changent aussi (traqueur en pointillés, rebondisseur à double bord…).
+  const BASE_COLORS = Object.assign({}, COLORS);
+  const COLORBLIND_COLORS = {
+    shard: '#ff4fae',
+    splitCrack: '#ffe0f0',
+    seeker: '#ff6a00',
+    bouncer: '#ffd0a0',
+    bullet: '#ffe8c0',
+    turret: '#ffb000',
+    laser: '#ff57e4',
+    laserCore: '#fff0fb',
+    mine: '#ff6a00',
+    mineRing: '#ffb000',
+    hole: '#ff4fd8',
+    wall: '#ff57e4',
+    wallCore: '#ffe0f7',
+  };
+  const DASH_SEEKER = [4, 3]; // contour en pointillés des traqueurs (mode daltonien)
+  const NO_DASH = [];
 
   // Police des textes du jeu : la même que l'interface (fonts/bungee.woff2)
   const FONT = '"Bungee", "Arial Black", system-ui, sans-serif';
@@ -709,7 +735,8 @@
   // Réglages vérifiés un par un : une valeur absente ou bizarre reprend sa valeur par défaut
   // (sert aussi pour les codes de sauvegarde importés)
   function sanitizeSettings(data) {
-    const s = { music: 60, sfx: 100, joystick: 'medium', reduceFx: false, difficulty: 'normal', tips: true, dash: 'tap' };
+    const s = { music: 60, sfx: 100, joystick: 'medium', reduceFx: false, difficulty: 'normal', tips: true, dash: 'tap',
+      colorblind: false };
     if (isPlainObject(data)) {
       if (Number.isFinite(data.music)) s.music = clamp(Math.round(data.music), 0, 100);
       if (Number.isFinite(data.sfx)) s.sfx = clamp(Math.round(data.sfx), 0, 100);
@@ -718,6 +745,7 @@
       if (has(DIFFICULTY, data.difficulty)) s.difficulty = data.difficulty;
       if (typeof data.tips === 'boolean') s.tips = data.tips;
       if (has(DASH_MODES, data.dash)) s.dash = data.dash;
+      s.colorblind = data.colorblind === true;
     }
     return s;
   }
@@ -734,6 +762,23 @@
 
   function joyRadius() {
     return JOYSTICK_SIZES[settings.joystick] || CONFIG.JOYSTICK_RADIUS;
+  }
+
+  // "#ff6a00" + 0.3 -> "rgba(255, 106, 0, 0.3)" (seulement quand la palette change)
+  function hexAlpha(hex, alpha) {
+    const n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + (n >> 16 & 255) + ', ' + (n >> 8 & 255) + ', ' + (n & 255) + ', ' + alpha + ')';
+  }
+
+  // Applique la palette normale ou celle du mode daltonien (jeu et légende "Comment jouer")
+  function applyPalette() {
+    Object.assign(COLORS, BASE_COLORS, settings.colorblind ? COLORBLIND_COLORS : null);
+    COLORS.shardFill = hexAlpha(COLORS.shard, 0.16);
+    COLORS.shardHalo = hexAlpha(COLORS.shard, 0.28);
+    COLORS.seekerHalo = hexAlpha(COLORS.seeker, 0.3);
+    COLORS.bouncerFill = hexAlpha(COLORS.bouncer, 0.16);
+    COLORS.bouncerHalo = hexAlpha(COLORS.bouncer, 0.3);
+    document.documentElement.classList.toggle('colorblind', settings.colorblind);
   }
 
   // Moins de tremblements, de flashs et de particules (réglage ou préférence du système)
@@ -1975,6 +2020,7 @@
     setSfxVal: $('set-sfx-val'),
     setJoystick: $('set-joystick'),
     setReduce: $('set-reduce'),
+    setColorblind: $('set-colorblind'),
     pauseMusic: $('pause-music'),
     pauseMusicVal: $('pause-music-val'),
     pauseSfx: $('pause-sfx'),
@@ -2472,6 +2518,7 @@
     }
     ui.setDashHelp.textContent = DASH_MODES[settings.dash].help;
     ui.setReduce.checked = settings.reduceFx;
+    ui.setColorblind.checked = settings.colorblind;
     const planned = storage.get(CONFIG.STORAGE_KEY_TUTO, '') !== '1';
     ui.btnTutoAgain.textContent = planned ? 'Prévu' : 'Revoir';
     ui.setTips.checked = settings.tips;
@@ -2546,6 +2593,11 @@
         Sound.click();
       });
     }
+    ui.setColorblind.addEventListener('change', function () {
+      settings.colorblind = ui.setColorblind.checked;
+      saveSettings();
+      applyPalette();
+    });
     ui.setTips.addEventListener('change', function () {
       settings.tips = ui.setTips.checked;
       saveSettings();
@@ -5912,9 +5964,11 @@
         // Alerte : la zone dangereuse est montrée à l'avance
         const progress = l.t / CONFIG.LASER_WARNING;
         const blink = 0.5 + 0.5 * Math.sin(l.t * (10 + 22 * progress));
-        ctx.fillStyle = 'rgba(255, 45, 111, ' + (0.06 + 0.14 * progress).toFixed(3) + ')';
+        ctx.globalAlpha = 0.06 + 0.14 * progress;
+        ctx.fillStyle = COLORS.laser;
         ctx.fillRect(0, -w / 2, len, w);
-        ctx.strokeStyle = 'rgba(255, 45, 111, 0.4)';
+        ctx.globalAlpha = 0.4;
+        ctx.strokeStyle = COLORS.laser;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(0, -w / 2);
@@ -5924,7 +5978,7 @@
         ctx.stroke();
         ctx.setLineDash([14, 10]);
         ctx.lineDashOffset = -l.t * 60;
-        ctx.strokeStyle = 'rgba(255, 45, 111, ' + (0.35 + 0.5 * blink).toFixed(3) + ')';
+        ctx.globalAlpha = 0.35 + 0.5 * blink;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(0, 0);
@@ -6063,14 +6117,19 @@
     ctx.lineTo(-k * 0.55, k);
     ctx.quadraticCurveTo(-k, k, -k, k * 0.55);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(255, 122, 92, 0.16)';
+    ctx.fillStyle = COLORS.bouncerFill;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 122, 92, 0.3)';
+    ctx.strokeStyle = COLORS.bouncerHalo;
     ctx.lineWidth = 7;
     ctx.stroke();
     ctx.strokeStyle = COLORS.bouncer;
     ctx.lineWidth = 2.4;
     ctx.stroke();
+    if (settings.colorblind) {
+      // Mode daltonien : double bord carré, bien différent d'un éclat
+      ctx.lineWidth = 1.6;
+      ctx.strokeRect(-k * 0.55, -k * 0.55, k * 1.1, k * 1.1);
+    }
     ctx.rotate(-h.rot);
     ctx.fillStyle = COLORS.bouncer;
     for (let i = 0; i < h.bounces; i++) {
@@ -6090,6 +6149,13 @@
     ctx.beginPath();
     ctx.arc(h.x, h.y, h.r, 0, TAU);
     ctx.fill();
+    if (settings.colorblind) {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = COLORS.background;
+      ctx.beginPath();
+      ctx.arc(h.x, h.y, h.r * 0.4, 0, TAU);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -6127,11 +6193,13 @@
       }
       ctx.shadowColor = COLORS.wall;
       ctx.shadowBlur = glow(20);
-      ctx.fillStyle = 'rgba(255, 61, 110, 0.85)';
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = COLORS.wall;
       ctx.fillRect(w.pos - th / 2, -10, th, w.gap - half + 10);
       ctx.fillRect(w.pos - th / 2, w.gap + half, th, length - (w.gap + half) + 10);
       ctx.shadowBlur = 0;
-      ctx.fillStyle = '#ffd6e2';
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = COLORS.wallCore;
       ctx.fillRect(w.pos - th * 0.15, -10, th * 0.3, w.gap - half + 10);
       ctx.fillRect(w.pos - th * 0.15, w.gap + half, th * 0.3, length - (w.gap + half) + 10);
       // Bords du passage bien visibles
@@ -6486,7 +6554,12 @@
     ctx.stroke();
     ctx.strokeStyle = COLORS.seeker;
     ctx.lineWidth = 2.2;
+    if (settings.colorblind) {
+      ctx.setLineDash(DASH_SEEKER);
+      ctx.lineWidth = 3;
+    }
     ctx.stroke();
+    ctx.setLineDash(NO_DASH);
     ctx.fillStyle = COLORS.seeker;
     ctx.beginPath();
     ctx.arc(0, 0, h.r * 0.38, 0, TAU);
@@ -6822,6 +6895,7 @@
     bindInstall();
     bindSaveCode();
     applyReduceFx();
+    applyPalette();
     bindButton('btn-resume', resumeGame);
     bindButton('btn-quit', function () { Sound.click(); goToMenu(); });
     bindButton('btn-replay', function () { startGame(game.mode); });
