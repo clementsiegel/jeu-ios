@@ -2126,10 +2126,33 @@
   function refreshMenu() {
     ui.menuBest.textContent = formatScore(game.best);
     ui.menuDaily.textContent = formatScore(loadDailyBest(todayKey()));
-    $('menu-info-ships').textContent = game.owned.length + ' / ' + SHIPS.length;
+    refreshShipGoal();
     $('menu-info-ach').textContent = unlockedCount() + ' / ' + ACHIEVEMENTS.length;
     buildMissionsPanel();
     refreshUpdateBar();
+  }
+
+  // Menu : prochain vaisseau à débloquer, à droite de "Vaisseaux".
+  // "Delta · 12 %" (points cumulés / prix), ou "Exploit manquant" si seuls les points sont atteints.
+  function refreshShipGoal() {
+    const next = nextShip();
+    const box = $('menu-info-ships');
+    const text = $('menu-goal-text');
+    let ratio = 1;
+    let need = false;
+    if (!next) {
+      text.textContent = SHIPS.length + ' / ' + SHIPS.length;
+    } else if (game.points >= next.cost) {
+      need = true;
+      text.textContent = next.name + ' · Exploit manquant';
+    } else {
+      ratio = game.points / next.cost;
+      text.textContent = next.name + ' · ' + Math.floor(ratio * 100) + ' %';
+    }
+    box.classList.toggle('need', need);
+    $('menu-goal-bar').classList.toggle('hidden', !next);
+    $('menu-goal-fill').style.transform = 'scaleX(' + clamp(ratio, 0, 1) + ')';
+    $('btn-ships').setAttribute('aria-label', 'Vaisseaux. ' + (next ? 'Prochain : ' + text.textContent : 'Tous débloqués'));
   }
 
   // --- Notifications (succès, vaisseau débloqué) ---

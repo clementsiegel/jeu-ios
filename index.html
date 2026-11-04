@@ -109,7 +109,12 @@
             <span class="menu-row-name">Classement</span><span class="menu-row-info">en ligne</span>
           </button>
           <button type="button" id="btn-ships" class="menu-row" style="--row: var(--cyan)">
-            <span class="menu-row-name">Vaisseaux</span><span class="menu-row-info" id="menu-info-ships"></span>
+            <span class="menu-row-name">Vaisseaux</span>
+            <!-- Prochain vaisseau à débloquer : nom, progression et barre (rempli par game.js) -->
+            <span class="menu-row-info menu-goal" id="menu-info-ships">
+              <span id="menu-goal-text"></span>
+              <span class="goal-bar" id="menu-goal-bar"><i id="menu-goal-fill"></i></span>
+            </span>
           </button>
           <button type="button" id="btn-achievements" class="menu-row" style="--row: var(--green)">
             <span class="menu-row-name">Succès</span><span class="menu-row-info" id="menu-info-ach"></span>
