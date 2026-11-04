@@ -1865,6 +1865,7 @@
     lbPseudoMsg: $('lb-pseudo-msg'),
     lbList: $('lb-list'),
     lbStatus: $('lb-status'),
+    updateBar: $('update-bar'),
     current: 'menu', // écran actuellement affiché
     screens: {
       menu: $('screen-menu'),
@@ -1915,6 +1916,7 @@
     ui.btnPause.classList.toggle('hidden', s !== 'playing');
     ui.tuto.classList.toggle('hidden', !(s === 'playing' && game.tuto.active));
     if (s !== 'playing') ui.toast.classList.add('hidden');
+    refreshUpdateBar();
     updateJoystickHome();
   }
 
@@ -2074,6 +2076,7 @@
     $('menu-info-ships').textContent = game.owned.length + ' / ' + SHIPS.length;
     $('menu-info-ach').textContent = unlockedCount() + ' / ' + ACHIEVEMENTS.length;
     buildMissionsPanel();
+    refreshUpdateBar();
   }
 
   // --- Notifications (succès, vaisseau débloqué) ---
@@ -6125,6 +6128,7 @@
     bindButton('btn-replay', function () { startGame(game.mode); });
     bindButton('btn-menu', function () { Sound.click(); goToMenu(); });
     bindButton('btn-pause', pauseGame);
+    bindButton('btn-reload', function () { location.reload(); });
     bindButton('btn-sound', toggleMute);
 
     // Clavier
@@ -6186,6 +6190,49 @@
     requestAnimationFrame(frame);
   }
 
+  // --- Mise à jour du jeu ---
+  // Quand une nouvelle version a été téléchargée, un bandeau "Nouvelle version prête"
+  // apparaît dans le menu. Le jeu ne se recharge JAMAIS tout seul (surtout pas en pleine partie).
+  const appUpdate = { ready: false };
+
+  function markUpdateReady() {
+    if (appUpdate.ready) return;
+    appUpdate.ready = true;
+    refreshUpdateBar();
+  }
+
+  function refreshUpdateBar() {
+    ui.updateBar.classList.toggle('hidden', !appUpdate.ready || game.state !== 'menu');
+  }
+
+  // Surveille l'arrivée d'une nouvelle version : au démarrage et à chaque retour sur le jeu
+  function watchForUpdates(reg) {
+    // Un nouveau "service worker" s'installe. S'il y en avait déjà un, c'est une mise à jour
+    // (sinon c'est le tout premier lancement : rien à annoncer).
+    reg.addEventListener('updatefound', function () {
+      const worker = reg.installing;
+      const wasInstalled = !!navigator.serviceWorker.controller;
+      if (!worker || !wasInstalled) return;
+      worker.addEventListener('statechange', function () {
+        if (worker.state === 'activated') markUpdateReady();
+      });
+    });
+    // La nouvelle version prend la main (sw.js appelle skipWaiting et clients.claim)
+    let controller = navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (controller) markUpdateReady();
+      controller = navigator.serviceWorker.controller;
+    });
+    const check = function () {
+      const promise = reg.update();
+      if (promise && promise.catch) promise.catch(function () { /* pas d'internet : on réessaiera */ });
+    };
+    check();
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) check();
+    });
+  }
+
   // Mode hors ligne : seulement quand le jeu est ouvert depuis un site (https://).
   // Il s'installe alors sur l'appareil et marche ensuite sans internet.
   // En double-cliquant sur index.html (file://), rien n'est activé : pas d'erreur.
@@ -6201,7 +6248,7 @@
 
     if (!('serviceWorker' in navigator)) return;
     const register = function () {
-      navigator.serviceWorker.register('sw.js').catch(function () {
+      navigator.serviceWorker.register('sw.js').then(watchForUpdates).catch(function () {
         /* mode hors ligne indisponible : le jeu marche quand même en ligne */
       });
     };

@@ -8,8 +8,8 @@
    IMPORTANT : après chaque modification du jeu, change le numéro de
    VERSION ci-dessous (le même que GAME_VERSION dans game.js : 1.8, 1.81,
    1.9…). Sinon les appareils garderont l'ancienne copie. La nouvelle
-   version est récupérée dès que le jeu est ouvert avec internet, puis
-   utilisée au lancement suivant.
+   version est récupérée dès que le jeu est ouvert avec internet : le menu
+   affiche alors "Nouvelle version prête" avec un bouton "Recharger".
    ====================================================================== */
 
 const VERSION = 'eclats-neon-2.1'; // même numéro que GAME_VERSION dans game.js

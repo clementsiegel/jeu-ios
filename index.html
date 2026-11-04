@@ -82,6 +82,12 @@
     <!-- ===== Écran d'accueil ===== -->
     <section id="screen-menu" class="screen screen-menu" aria-labelledby="menu-title">
       <div class="panel">
+        <!-- Nouvelle version téléchargée : affiché seulement dans le menu (rempli par game.js) -->
+        <div id="update-bar" class="update-bar hidden" role="status" aria-live="polite">
+          <span class="update-text">Nouvelle version prête</span>
+          <button type="button" id="btn-reload" class="btn btn-small btn-primary">Recharger</button>
+        </div>
+
         <header class="logo">
           <h1 id="menu-title" class="logo-title"><span class="logo-a">Éclats</span><span class="logo-b">Néon</span></h1>
           <p class="tagline">Esquive, frôle, ramasse l'énergie. Tiens le plus longtemps possible.</p>

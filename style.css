@@ -632,6 +632,31 @@ kbd {
    MENU PRINCIPAL
    ===================================================================== */
 
+/* Bandeau "Nouvelle version prête" */
+.update-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 10px 12px 10px 14px;
+  border: 2px solid var(--line);
+  border-left: 6px solid var(--green);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.update-text {
+  font-family: var(--display);
+  font-size: 13px;
+  color: var(--green);
+}
+
+.update-bar .btn {
+  flex-shrink: 0;
+  min-height: 44px;
+}
+
 .logo {
   margin-bottom: 22px;
 }
