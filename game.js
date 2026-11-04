@@ -352,6 +352,15 @@
     wall: '#ff57e4',
     wallCore: '#ffe0f7',
   };
+  // Taille du texte (Réglages) : ui = interface (variable CSS --ui-scale),
+  // canvas = textes dessinés dans le jeu (+20 % au maximum)
+  const TEXT_SCALES = {
+    normal: { ui: 1, canvas: 1 },
+    large:  { ui: 1.15, canvas: 1.1 },
+    xlarge: { ui: 1.3, canvas: 1.2 },
+  };
+  let canvasTextScale = 1;
+
   const DASH_SEEKER = [4, 3]; // contour en pointillés des traqueurs (mode daltonien)
   const NO_DASH = [];
 
@@ -736,7 +745,7 @@
   // (sert aussi pour les codes de sauvegarde importés)
   function sanitizeSettings(data) {
     const s = { music: 60, sfx: 100, joystick: 'medium', reduceFx: false, difficulty: 'normal', tips: true, dash: 'tap',
-      colorblind: false };
+      colorblind: false, textScale: 'normal' };
     if (isPlainObject(data)) {
       if (Number.isFinite(data.music)) s.music = clamp(Math.round(data.music), 0, 100);
       if (Number.isFinite(data.sfx)) s.sfx = clamp(Math.round(data.sfx), 0, 100);
@@ -746,6 +755,7 @@
       if (typeof data.tips === 'boolean') s.tips = data.tips;
       if (has(DASH_MODES, data.dash)) s.dash = data.dash;
       s.colorblind = data.colorblind === true;
+      if (has(TEXT_SCALES, data.textScale)) s.textScale = data.textScale;
     }
     return s;
   }
@@ -779,6 +789,16 @@
     COLORS.bouncerFill = hexAlpha(COLORS.bouncer, 0.16);
     COLORS.bouncerHalo = hexAlpha(COLORS.bouncer, 0.3);
     document.documentElement.classList.toggle('colorblind', settings.colorblind);
+  }
+
+  // Applique la taille du texte : interface (rem) et textes du canvas
+  function applyTextScale() {
+    const t = TEXT_SCALES[settings.textScale] || TEXT_SCALES.normal;
+    const root = document.documentElement;
+    root.style.setProperty('--ui-scale', String(t.ui));
+    root.classList.toggle('ui-large', t.ui > 1);
+    root.classList.toggle('ui-xl', t.ui >= 1.3);
+    canvasTextScale = t.canvas;
   }
 
   // Moins de tremblements, de flashs et de particules (réglage ou préférence du système)
@@ -2021,6 +2041,7 @@
     setJoystick: $('set-joystick'),
     setReduce: $('set-reduce'),
     setColorblind: $('set-colorblind'),
+    setText: $('set-text'),
     pauseMusic: $('pause-music'),
     pauseMusicVal: $('pause-music-val'),
     pauseSfx: $('pause-sfx'),
@@ -2517,6 +2538,11 @@
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
     ui.setDashHelp.textContent = DASH_MODES[settings.dash].help;
+    for (const b of ui.setText.querySelectorAll('button')) {
+      const on = b.getAttribute('data-scale') === settings.textScale;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
     ui.setReduce.checked = settings.reduceFx;
     ui.setColorblind.checked = settings.colorblind;
     const planned = storage.get(CONFIG.STORAGE_KEY_TUTO, '') !== '1';
@@ -2581,6 +2607,17 @@
         settings.difficulty = b.getAttribute('data-diff');
         saveSettings();
         buildSettings();
+        Sound.click();
+      });
+    }
+    for (const b of ui.setText.querySelectorAll('button')) {
+      b.addEventListener('click', function () {
+        settings.textScale = b.getAttribute('data-scale');
+        saveSettings();
+        applyTextScale();
+        buildSettings();
+        b.focus({ preventScroll: true });
+        b.scrollIntoView({ block: 'nearest' });
         Sound.click();
       });
     }
@@ -6784,12 +6821,13 @@
     ctx.strokeStyle = 'rgba(5, 1, 15, 0.9)';
     for (const t of game.texts) {
       ctx.globalAlpha = Math.min(1, (t.life / t.maxLife) * 2.5);
-      ctx.font = t.size + 'px ' + FONT;
+      // Taille du texte choisie dans les réglages (+20 % au maximum)
+      let size = Math.round(t.size * canvasTextScale);
+      ctx.font = size + 'px ' + FONT;
       // Texte trop long pour l'écran : on le réduit
-      let size = t.size;
       const width = ctx.measureText(t.text).width;
       if (width > view.W - 28) {
-        size = Math.floor(t.size * (view.W - 28) / width);
+        size = Math.floor(size * (view.W - 28) / width);
         ctx.font = size + 'px ' + FONT;
       }
       // Contour sombre net (lisible sur tout le décor), puis la couleur
@@ -6813,7 +6851,7 @@
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r + 10 + 80 * k, 0, TAU);
     ctx.stroke();
-    ctx.font = '40px ' + FONT;
+    ctx.font = Math.round(40 * canvasTextScale) + 'px ' + FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
@@ -6896,6 +6934,7 @@
     bindSaveCode();
     applyReduceFx();
     applyPalette();
+    applyTextScale();
     bindButton('btn-resume', resumeGame);
     bindButton('btn-quit', function () { Sound.click(); goToMenu(); });
     bindButton('btn-replay', function () { startGame(game.mode); });

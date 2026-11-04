@@ -38,6 +38,8 @@
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --radius: 6px;
+  /* Taille du texte (Réglages) : 1, 1.15 ou 1.3. Toutes les tailles de texte sont en rem */
+  --ui-scale: 1;
   /* Couleurs des dangers dans la légende (les mêmes que dans le jeu) */
   --c-shard: #ff3d8b;
   --c-seeker: #ff9d3d;
@@ -65,6 +67,10 @@ html.colorblind {
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+html {
+  font-size: calc(16px * var(--ui-scale)); /* 1rem = 16 px en taille normale */
 }
 
 html,
@@ -164,7 +170,7 @@ button {
 
 .hud-label {
   font-family: var(--display);
-  font-size: 10px;
+  font-size: min(0.625rem, 11px); /* grandit un peu avec la taille du texte, sans pousser les chiffres */
   letter-spacing: 0.04em;
   color: var(--muted);
   text-shadow: 0 1px 0 var(--ink);
@@ -172,7 +178,7 @@ button {
 
 .hud-value {
   font-family: var(--display);
-  font-size: 24px;
+  font-size: min(1.5rem, 26px);
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--cyan);
@@ -219,7 +225,7 @@ button {
 
 .trial-text {
   font-family: var(--display);
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1;
   color: var(--ship-color, var(--cyan));
   text-shadow: 0 2px 0 var(--ink);
@@ -261,7 +267,7 @@ button {
   background: rgba(5, 1, 15, 0.82);
   color: var(--pu-color);
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .pu-name {
@@ -301,13 +307,13 @@ button {
 
 .combo-label {
   font-family: var(--display);
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--muted);
 }
 
 .combo-mult {
   font-family: var(--display);
-  font-size: 18px;
+  font-size: 1.125rem;
   line-height: 1;
   color: var(--text);
 }
@@ -327,7 +333,7 @@ button {
 }
 
 .combo-steps {
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 1;
   letter-spacing: 0.15em;
   color: var(--text);
@@ -398,7 +404,7 @@ button {
   border-left: 5px solid var(--toast, var(--yellow));
   background: var(--panel);
   color: var(--text);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.35;
   box-shadow: 0 4px 0 var(--ink);
@@ -440,12 +446,12 @@ button {
 
 .tip-label {
   font-family: var(--display);
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--tip, var(--cyan));
 }
 
 .tip-text {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.35;
 }
@@ -473,12 +479,12 @@ button {
 
 .tuto-step {
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--cyan);
 }
 
 .tuto-text {
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 700;
   line-height: 1.35;
 }
@@ -539,7 +545,7 @@ button {
   background: var(--panel-2);
   color: var(--text);
   font-family: var(--display);
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.1;
   box-shadow: 0 4px 0 var(--ink);
   cursor: pointer;
@@ -573,7 +579,7 @@ button {
 .btn-small {
   min-height: 38px;
   padding: 7px 14px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   box-shadow: 0 3px 0 var(--ink);
 }
 
@@ -587,7 +593,7 @@ button {
 
 .btn-row .btn-primary {
   flex: 1 1 100%;
-  font-size: 20px;
+  font-size: 1.25rem;
 }
 
 .link-btn {
@@ -596,7 +602,7 @@ button {
   border: 0;
   background: none;
   color: var(--cyan);
-  font: 700 14px var(--font);
+  font: 700 0.875rem var(--font);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
@@ -611,7 +617,7 @@ button {
   background: var(--panel-2);
   color: var(--text);
   font-family: var(--display);
-  font-size: 12px;
+  font-size: 0.75rem;
   box-shadow: 0 3px 0 var(--ink);
   cursor: pointer;
 }
@@ -619,7 +625,7 @@ button {
 .back-btn::before {
   content: "‹ ";
   font-family: var(--font);
-  font-size: 18px;
+  font-size: 1.125rem;
   line-height: 0;
 }
 
@@ -631,8 +637,9 @@ button {
 /* ---------- Titres et textes ---------- */
 .screen-head {
   display: flex;
+  flex-wrap: wrap; /* titre trop long (texte très grand) : il passe sous "Retour" */
   align-items: center;
-  gap: 14px;
+  gap: 10px 14px;
   margin-bottom: 16px;
 }
 
@@ -640,19 +647,19 @@ button {
   margin: 0;
   font-family: var(--display);
   font-weight: 400;
-  font-size: clamp(26px, 7.5vw, 40px);
+  font-size: min(clamp(1.625rem, calc(7.5vw * var(--ui-scale)), 2.5rem), 9vw);
   line-height: 1;
   color: var(--title, var(--text));
 }
 
 .pause-title {
-  font-size: clamp(40px, 12vw, 64px);
+  font-size: clamp(2.5rem, calc(12vw * var(--ui-scale)), 4rem);
   color: var(--cyan);
   text-shadow: 4px 4px 0 var(--cyan-dark);
 }
 
 .gameover-title {
-  font-size: clamp(28px, 8.5vw, 46px);
+  font-size: clamp(1.75rem, calc(8.5vw * var(--ui-scale)), 2.875rem);
   color: var(--pink);
   text-shadow: 3px 3px 0 var(--pink-dark);
 }
@@ -661,20 +668,20 @@ button {
   margin: 26px 0 0;
   font-family: var(--display);
   font-weight: 400;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--muted);
 }
 
 .lead {
   margin: 0;
   font-family: var(--display);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--muted);
 }
 
 .lead strong {
   margin: 0 6px;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 400;
 }
 
@@ -684,7 +691,7 @@ button {
 
 .hint {
   margin: 8px 0 0;
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   line-height: 1.45;
   color: var(--muted);
 }
@@ -700,7 +707,7 @@ button {
 .version-line {
   margin: 22px 0 0;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
@@ -714,7 +721,7 @@ kbd {
   border-radius: 4px;
   background: var(--panel-2);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 20px;
   text-align: center;
   color: var(--text);
@@ -740,7 +747,7 @@ kbd {
 
 .update-text {
   font-family: var(--display);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--green);
 }
 
@@ -757,7 +764,7 @@ kbd {
   margin: 0;
   font-family: var(--display);
   font-weight: 400;
-  font-size: clamp(54px, 17vw, 92px);
+  font-size: clamp(3.375rem, calc(17vw * var(--ui-scale)), 5.75rem);
   line-height: 0.92;
   letter-spacing: -0.01em;
 }
@@ -778,7 +785,7 @@ kbd {
 .tagline {
   max-width: 34ch;
   margin: 16px 0 0;
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.45;
   color: var(--muted);
 }
@@ -786,7 +793,7 @@ kbd {
 .btn-play {
   width: 100%;
   min-height: 64px;
-  font-size: 26px;
+  font-size: 1.625rem;
   box-shadow: 0 6px 0 var(--cyan-dark);
 }
 
@@ -828,7 +835,7 @@ kbd {
 
 .menu-row::after {
   content: "›";
-  font-size: 26px;
+  font-size: 1.625rem;
   line-height: 1;
   color: var(--muted);
 }
@@ -845,11 +852,11 @@ kbd {
 .menu-row-name {
   flex: 1;
   font-family: var(--display);
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .menu-row-info {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--muted);
 }
@@ -899,13 +906,13 @@ kbd {
   margin: 0;
   font-family: var(--display);
   font-weight: 400;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--cyan);
 }
 
 .install-text {
   margin: 8px 0 0;
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.45;
 }
 
@@ -941,7 +948,7 @@ kbd {
 }
 
 .install-step small {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.25;
   text-align: center;
@@ -960,7 +967,7 @@ kbd {
   background: var(--cyan);
   color: #021619;
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .install-arrow {
@@ -977,7 +984,7 @@ kbd {
 
 .install-note {
   margin: 8px 0 0;
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   line-height: 1.4;
   color: var(--muted);
 }
@@ -1015,13 +1022,13 @@ kbd {
 
 .sb-label {
   font-family: var(--display);
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--muted);
 }
 
 .scoreboard strong {
   font-family: var(--display);
-  font-size: 22px;
+  font-size: 1.375rem;
   font-weight: 400;
   line-height: 1;
   color: var(--yellow);
@@ -1053,12 +1060,12 @@ kbd {
   margin: 0;
   font-family: var(--display);
   font-weight: 400;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--green);
 }
 
 .streak {
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   font-weight: 700;
   color: var(--orange);
 }
@@ -1079,14 +1086,14 @@ kbd {
 }
 
 .mission-text {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.3;
 }
 
 .mission-reward {
   font-family: var(--display);
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--yellow);
 }
 
@@ -1105,7 +1112,7 @@ kbd {
 
 .mission-count {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 0.7188rem;
   color: var(--muted);
   text-align: right;
 }
@@ -1135,7 +1142,7 @@ kbd {
   min-height: 50px;
   padding: 0 14px;
   font-family: var(--display);
-  font-size: 14px;
+  font-size: 0.875rem;
   list-style: none;
   cursor: pointer;
 }
@@ -1146,7 +1153,7 @@ kbd {
 
 .howto summary::after {
   content: "+";
-  font-size: 22px;
+  font-size: 1.375rem;
   color: var(--muted);
 }
 
@@ -1164,7 +1171,7 @@ kbd {
   margin: 0 0 6px;
   font-family: var(--display);
   font-weight: 400;
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--muted);
 }
 
@@ -1175,7 +1182,7 @@ kbd {
   gap: 12px;
   padding: 7px 0;
   border-top: 1px solid var(--line);
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   line-height: 1.45;
 }
 
@@ -1196,7 +1203,7 @@ kbd {
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   line-height: 1.4;
   color: var(--muted);
 }
@@ -1253,7 +1260,7 @@ kbd {
   background: var(--yellow);
   color: #1a1400;
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 /* "Touché par : un laser" + conseil, sous le titre */
@@ -1268,14 +1275,14 @@ kbd {
 .go-cause-what {
   display: block;
   font-family: var(--display);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--pink);
 }
 
 .go-cause-tip {
   display: block;
   margin-top: 3px;
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   line-height: 1.4;
   color: var(--text);
 }
@@ -1289,13 +1296,13 @@ kbd {
 
 .final-label {
   font-family: var(--display);
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
 .final-value {
   font-family: var(--display);
-  font-size: clamp(48px, 15vw, 78px);
+  font-size: clamp(3rem, calc(15vw * var(--ui-scale)), 4.875rem);
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
   color: var(--cyan);
@@ -1316,7 +1323,7 @@ kbd {
   padding: 8px 12px;
   border-left: 5px solid var(--badge, var(--yellow));
   background: var(--panel);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.35;
 }
@@ -1364,19 +1371,19 @@ kbd {
 
 .stat span {
   font-family: var(--display);
-  font-size: 17px;
+  font-size: 1.0625rem;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
 .stat small {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--muted);
 }
 
 .progress-line {
   margin: 12px 0 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.4;
   color: var(--muted);
 }
@@ -1393,11 +1400,11 @@ kbd {
 }
 
 .stats-compact .stat span {
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .stats-compact .stat small {
-  font-size: 10.5px;
+  font-size: 0.6562rem;
   line-height: 1.2;
 }
 
@@ -1485,11 +1492,11 @@ kbd {
 
 .ship-name {
   font-family: var(--display);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .ship-perk {
-  font-size: 11.5px;
+  font-size: 0.7188rem;
   font-weight: 700;
   color: var(--ship-color);
 }
@@ -1499,7 +1506,7 @@ kbd {
 }
 
 .ship-status {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--muted);
 }
 
@@ -1539,13 +1546,13 @@ kbd {
 
 .ship-info-title {
   font-family: var(--display);
-  font-size: 15px;
+  font-size: 0.9375rem;
   color: var(--ship-color);
 }
 
 .ship-info-desc {
   margin-top: 4px !important;
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.4;
 }
 
@@ -1555,7 +1562,7 @@ kbd {
   margin: 10px 0 0;
   padding: 0;
   list-style: none;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--muted);
 }
 
@@ -1618,11 +1625,11 @@ kbd {
 
 .theme-name {
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .theme-status {
-  font-size: 10.5px;
+  font-size: 0.6562rem;
   color: var(--muted);
 }
 
@@ -1677,18 +1684,18 @@ kbd {
 
 .mode-name {
   font-family: var(--display);
-  font-size: 16px;
+  font-size: 1rem;
   color: var(--mode, var(--text));
 }
 
 .mode-desc {
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   line-height: 1.4;
   color: var(--muted);
 }
 
 .mode-best {
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   color: var(--muted);
 }
 
@@ -1730,7 +1737,7 @@ kbd {
   height: 20px;
   margin-top: 1px;
   border: 2px solid var(--line-2);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 900;
   line-height: 1;
   color: #1a1400;
@@ -1746,7 +1753,7 @@ kbd {
 }
 
 .ach-name {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 800;
   line-height: 1.3;
 }
@@ -1756,7 +1763,7 @@ kbd {
 }
 
 .ach-desc {
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   line-height: 1.35;
   color: var(--muted);
 }
@@ -1781,7 +1788,7 @@ kbd {
 }
 
 .stats-grid .stat span {
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 /* =====================================================================
@@ -1810,14 +1817,14 @@ kbd {
 
 .setting-name {
   font-family: var(--display);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .setting-name small {
   display: block;
   margin-top: 4px;
   font-family: var(--font);
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   line-height: 1.4;
   color: var(--muted);
 }
@@ -1832,7 +1839,7 @@ kbd {
   grid-column: 2;
   min-width: 3ch;
   font-family: var(--display);
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--cyan);
   text-align: right;
 }
@@ -1861,7 +1868,7 @@ kbd {
 }
 
 .save-label {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   color: var(--muted);
 }
@@ -1874,7 +1881,7 @@ kbd {
   border-radius: var(--radius);
   background: var(--bg);
   color: var(--text);
-  font: 16px/1.35 var(--mono); /* 16 px minimum : l'iPhone ne zoome pas sur le champ */
+  font: 1rem/1.35 var(--mono); /* 16 px minimum : l'iPhone ne zoome pas sur le champ */
   word-break: break-all;
   resize: vertical;
   -webkit-user-select: text;
@@ -1888,7 +1895,7 @@ kbd {
 
 .save-msg {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   line-height: 1.4;
   color: var(--green);
 }
@@ -1911,14 +1918,14 @@ kbd {
 
 .save-preview {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.4;
 }
 
 .save-warn {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--yellow);
 }
 
@@ -1949,7 +1956,7 @@ kbd {
   background: var(--panel-2);
   color: var(--muted);
   font-family: var(--display);
-  font-size: 12px;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 
@@ -1981,7 +1988,7 @@ kbd {
 
 .rank-text {
   font-family: var(--display);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .rank-text:empty {
@@ -1999,7 +2006,7 @@ kbd {
 }
 
 .pseudo-label {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   color: var(--muted);
 }
@@ -2022,7 +2029,7 @@ kbd {
   border-radius: var(--radius);
   background: var(--bg);
   color: var(--text);
-  font: 600 16px var(--font); /* 16 px minimum : l'iPhone ne zoome pas sur le champ */
+  font: 600 1rem var(--font); /* 16 px minimum : l'iPhone ne zoome pas sur le champ */
   -webkit-user-select: text;
   user-select: text;
   outline: none;
@@ -2043,7 +2050,7 @@ kbd {
 .pseudo-msg {
   margin: 0;
   min-height: 1.3em;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--muted);
 }
 
@@ -2073,7 +2080,7 @@ kbd {
   align-items: center;
   gap: 0 8px;
   margin: 0;
-  font-size: 15px;
+  font-size: 0.9375rem;
   color: var(--muted);
 }
 
@@ -2102,7 +2109,7 @@ kbd {
 
 .lb-rank {
   font-family: var(--display);
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--muted);
   text-align: center;
 }
@@ -2120,7 +2127,7 @@ kbd {
 
 .lb-score {
   font-family: var(--display);
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--yellow);
 }
 
@@ -2144,7 +2151,7 @@ kbd {
   inset: auto 16px 40%;
   z-index: 10;
   text-align: center;
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 /* =====================================================================
@@ -2159,12 +2166,17 @@ kbd {
 }
 
 @media (max-width: 480px) {
+  /* Le score ne doit jamais toucher les boutons pause et son, même avec un gros record */
   #hud {
-    gap: 14px;
+    gap: 12px;
   }
 
   .hud-value {
-    font-size: 20px;
+    font-size: min(1.25rem, 20px, 5.2vw);
+  }
+
+  .ui-large #hud {
+    gap: 10px;
   }
 
   .ctrl-row {
@@ -2179,15 +2191,15 @@ kbd {
   }
 
   .stat span {
-    font-size: 15px;
+    font-size: 0.9375rem;
   }
 
   .stat small {
-    font-size: 10px;
+    font-size: 0.625rem;
   }
 
   .stats-grid .stat span {
-    font-size: 14px;
+    font-size: 0.875rem;
   }
 
   .achievements {
@@ -2211,11 +2223,11 @@ kbd {
   }
 
   .gameover-title {
-    font-size: 28px;
+    font-size: 1.75rem;
   }
 
   .pause-title {
-    font-size: 34px;
+    font-size: 2.125rem;
   }
 
   .pause-settings {
@@ -2239,7 +2251,7 @@ kbd {
   }
 
   .final-value {
-    font-size: 46px;
+    font-size: 2.875rem;
   }
 
   .go-actions {
