@@ -38,12 +38,39 @@
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --radius: 6px;
+  /* Taille du texte (Réglages) : 1, 1.15 ou 1.3. Toutes les tailles de texte sont en rem */
+  --ui-scale: 1;
+  /* Couleurs des dangers dans la légende (les mêmes que dans le jeu) */
+  --c-shard: #ff3d8b;
+  --c-seeker: #ff9d3d;
+  --c-laser: #ff2d6f;
+  --c-mine: #ff4a3d;
+  --c-hole: #ff2dd2;
+  --c-bouncer: #ff7a5c;
+  --c-wall: #ff3d6e;
+  --c-turret: #ffb13d;
+}
+
+/* Mode daltonien : la palette de COLORBLIND_COLORS (game.js) */
+html.colorblind {
+  --c-shard: #ff4fae;
+  --c-seeker: #ff6a00;
+  --c-laser: #ff57e4;
+  --c-mine: #ff6a00;
+  --c-hole: #ff4fd8;
+  --c-bouncer: #ffd0a0;
+  --c-wall: #ff57e4;
+  --c-turret: #ffb000;
 }
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+html {
+  font-size: calc(16px * var(--ui-scale)); /* 1rem = 16 px en taille normale */
 }
 
 html,
@@ -143,7 +170,7 @@ button {
 
 .hud-label {
   font-family: var(--display);
-  font-size: 10px;
+  font-size: min(0.625rem, 11px); /* grandit un peu avec la taille du texte, sans pousser les chiffres */
   letter-spacing: 0.04em;
   color: var(--muted);
   text-shadow: 0 1px 0 var(--ink);
@@ -151,7 +178,7 @@ button {
 
 .hud-value {
   font-family: var(--display);
-  font-size: 24px;
+  font-size: min(1.5rem, 26px);
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--cyan);
@@ -181,6 +208,43 @@ button {
   transform-origin: left center;
 }
 
+/* ---------- Bandeau de l'essai d'un vaisseau (à la place du score) ---------- */
+.trial-bar {
+  position: absolute;
+  z-index: 2;
+  top: calc(14px + env(safe-area-inset-top, 0px) * 1.25);
+  left: max(16px, env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 12px 7px 10px;
+  border-left: 5px solid var(--ship-color, var(--cyan));
+  background: rgba(5, 1, 15, 0.82);
+  pointer-events: none;
+}
+
+.trial-text {
+  font-family: var(--display);
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--ship-color, var(--cyan));
+  text-shadow: 0 2px 0 var(--ink);
+}
+
+.trial-track {
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.trial-track i {
+  display: block;
+  height: 100%;
+  background: var(--ship-color, var(--cyan));
+  transform-origin: left center;
+}
+
 /* ---------- Combo et bonus actifs (sous le score) ---------- */
 #powerups {
   position: absolute;
@@ -203,7 +267,7 @@ button {
   background: rgba(5, 1, 15, 0.82);
   color: var(--pu-color);
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .pu-name {
@@ -243,13 +307,13 @@ button {
 
 .combo-label {
   font-family: var(--display);
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--muted);
 }
 
 .combo-mult {
   font-family: var(--display);
-  font-size: 18px;
+  font-size: 1.125rem;
   line-height: 1;
   color: var(--text);
 }
@@ -269,7 +333,7 @@ button {
 }
 
 .combo-steps {
-  font-size: 9px;
+  font-size: 0.5625rem;
   line-height: 1;
   letter-spacing: 0.15em;
   color: var(--text);
@@ -340,7 +404,7 @@ button {
   border-left: 5px solid var(--toast, var(--yellow));
   background: var(--panel);
   color: var(--text);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.35;
   box-shadow: 0 4px 0 var(--ink);
@@ -356,6 +420,40 @@ button {
 @keyframes toast-in {
   from { opacity: 0; transform: translate(-50%, -6px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ---------- Astuce (première fois qu'un élément apparaît) ---------- */
+.tip {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 120px; /* repositionné par game.js sous le score, les bonus et la notification */
+  width: max-content;
+  max-width: min(88vw, 380px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 12px 8px;
+  border: 2px solid var(--line-2);
+  border-left: 6px solid var(--tip, var(--cyan));
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 4px 0 var(--ink);
+  pointer-events: none; /* ne bloque jamais le jeu */
+  transform: translateX(-50%);
+  animation: toast-in 0.25s ease-out both;
+}
+
+.tip-label {
+  font-family: var(--display);
+  font-size: 0.625rem;
+  color: var(--tip, var(--cyan));
+}
+
+.tip-text {
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 /* ---------- Tutoriel ---------- */
@@ -381,12 +479,12 @@ button {
 
 .tuto-step {
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--cyan);
 }
 
 .tuto-text {
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 700;
   line-height: 1.35;
 }
@@ -447,7 +545,7 @@ button {
   background: var(--panel-2);
   color: var(--text);
   font-family: var(--display);
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.1;
   box-shadow: 0 4px 0 var(--ink);
   cursor: pointer;
@@ -481,7 +579,7 @@ button {
 .btn-small {
   min-height: 38px;
   padding: 7px 14px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   box-shadow: 0 3px 0 var(--ink);
 }
 
@@ -495,7 +593,7 @@ button {
 
 .btn-row .btn-primary {
   flex: 1 1 100%;
-  font-size: 20px;
+  font-size: 1.25rem;
 }
 
 .link-btn {
@@ -504,7 +602,7 @@ button {
   border: 0;
   background: none;
   color: var(--cyan);
-  font: 700 14px var(--font);
+  font: 700 0.875rem var(--font);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
@@ -519,7 +617,7 @@ button {
   background: var(--panel-2);
   color: var(--text);
   font-family: var(--display);
-  font-size: 12px;
+  font-size: 0.75rem;
   box-shadow: 0 3px 0 var(--ink);
   cursor: pointer;
 }
@@ -527,7 +625,7 @@ button {
 .back-btn::before {
   content: "‹ ";
   font-family: var(--font);
-  font-size: 18px;
+  font-size: 1.125rem;
   line-height: 0;
 }
 
@@ -539,8 +637,9 @@ button {
 /* ---------- Titres et textes ---------- */
 .screen-head {
   display: flex;
+  flex-wrap: wrap; /* titre trop long (texte très grand) : il passe sous "Retour" */
   align-items: center;
-  gap: 14px;
+  gap: 10px 14px;
   margin-bottom: 16px;
 }
 
@@ -548,19 +647,19 @@ button {
   margin: 0;
   font-family: var(--display);
   font-weight: 400;
-  font-size: clamp(26px, 7.5vw, 40px);
+  font-size: min(clamp(1.625rem, calc(7.5vw * var(--ui-scale)), 2.5rem), 9vw);
   line-height: 1;
   color: var(--title, var(--text));
 }
 
 .pause-title {
-  font-size: clamp(40px, 12vw, 64px);
+  font-size: clamp(2.5rem, calc(12vw * var(--ui-scale)), 4rem);
   color: var(--cyan);
   text-shadow: 4px 4px 0 var(--cyan-dark);
 }
 
 .gameover-title {
-  font-size: clamp(28px, 8.5vw, 46px);
+  font-size: clamp(1.75rem, calc(8.5vw * var(--ui-scale)), 2.875rem);
   color: var(--pink);
   text-shadow: 3px 3px 0 var(--pink-dark);
 }
@@ -569,20 +668,20 @@ button {
   margin: 26px 0 0;
   font-family: var(--display);
   font-weight: 400;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--muted);
 }
 
 .lead {
   margin: 0;
   font-family: var(--display);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--muted);
 }
 
 .lead strong {
   margin: 0 6px;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 400;
 }
 
@@ -592,7 +691,7 @@ button {
 
 .hint {
   margin: 8px 0 0;
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   line-height: 1.45;
   color: var(--muted);
 }
@@ -608,7 +707,7 @@ button {
 .version-line {
   margin: 22px 0 0;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
@@ -622,7 +721,7 @@ kbd {
   border-radius: 4px;
   background: var(--panel-2);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 20px;
   text-align: center;
   color: var(--text);
@@ -632,6 +731,31 @@ kbd {
    MENU PRINCIPAL
    ===================================================================== */
 
+/* Bandeau "Nouvelle version prête" */
+.update-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 10px 12px 10px 14px;
+  border: 2px solid var(--line);
+  border-left: 6px solid var(--green);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.update-text {
+  font-family: var(--display);
+  font-size: 0.8125rem;
+  color: var(--green);
+}
+
+.update-bar .btn {
+  flex-shrink: 0;
+  min-height: 44px;
+}
+
 .logo {
   margin-bottom: 22px;
 }
@@ -640,7 +764,7 @@ kbd {
   margin: 0;
   font-family: var(--display);
   font-weight: 400;
-  font-size: clamp(54px, 17vw, 92px);
+  font-size: clamp(3.375rem, calc(17vw * var(--ui-scale)), 5.75rem);
   line-height: 0.92;
   letter-spacing: -0.01em;
 }
@@ -661,7 +785,7 @@ kbd {
 .tagline {
   max-width: 34ch;
   margin: 16px 0 0;
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.45;
   color: var(--muted);
 }
@@ -669,7 +793,7 @@ kbd {
 .btn-play {
   width: 100%;
   min-height: 64px;
-  font-size: 26px;
+  font-size: 1.625rem;
   box-shadow: 0 6px 0 var(--cyan-dark);
 }
 
@@ -711,7 +835,7 @@ kbd {
 
 .menu-row::after {
   content: "›";
-  font-size: 26px;
+  font-size: 1.625rem;
   line-height: 1;
   color: var(--muted);
 }
@@ -728,13 +852,151 @@ kbd {
 .menu-row-name {
   flex: 1;
   font-family: var(--display);
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .menu-row-info {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--muted);
+}
+
+/* Prochain vaisseau, à droite de "Vaisseaux" : "Delta · 12 %" + barre fine */
+.menu-goal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  text-align: right;
+}
+
+.menu-goal.need {
+  color: var(--orange);
+}
+
+.goal-bar {
+  width: 84px;
+  height: 3px;
+  overflow: hidden;
+  background: var(--line-2);
+}
+
+.goal-bar i {
+  display: block;
+  height: 100%;
+  background: var(--yellow);
+  transform-origin: left center;
+}
+
+.menu-goal.need .goal-bar i {
+  background: var(--orange);
+}
+
+/* Carte "Installe le jeu" (installation sur l'écran d'accueil) */
+.install-card {
+  margin-top: 14px;
+  padding: 12px 14px 14px;
+  border: 2px solid var(--line);
+  border-left: 6px solid var(--cyan);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.install-title {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 0.875rem;
+  color: var(--cyan);
+}
+
+.install-text {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.install-steps {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.install-step {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px 8px;
+  border: 2px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--cyan);
+}
+
+.install-step svg {
+  width: 30px;
+  height: 30px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.install-step small {
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--text);
+}
+
+.install-num {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius) 0 var(--radius) 0;
+  background: var(--cyan);
+  color: #021619;
+  font-family: var(--display);
+  font-size: 0.6875rem;
+}
+
+.install-arrow {
+  flex-shrink: 0;
+  align-self: center;
+  width: 14px;
+  height: 28px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.install-note {
+  margin: 8px 0 0;
+  font-size: 0.7812rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.install-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.install-actions .btn {
+  min-height: 44px;
 }
 
 /* Tableau des records */
@@ -760,13 +1022,13 @@ kbd {
 
 .sb-label {
   font-family: var(--display);
-  font-size: 10px;
+  font-size: 0.625rem;
   color: var(--muted);
 }
 
 .scoreboard strong {
   font-family: var(--display);
-  font-size: 22px;
+  font-size: 1.375rem;
   font-weight: 400;
   line-height: 1;
   color: var(--yellow);
@@ -798,12 +1060,12 @@ kbd {
   margin: 0;
   font-family: var(--display);
   font-weight: 400;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--green);
 }
 
 .streak {
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   font-weight: 700;
   color: var(--orange);
 }
@@ -824,14 +1086,14 @@ kbd {
 }
 
 .mission-text {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.3;
 }
 
 .mission-reward {
   font-family: var(--display);
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--yellow);
 }
 
@@ -850,7 +1112,7 @@ kbd {
 
 .mission-count {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 0.7188rem;
   color: var(--muted);
   text-align: right;
 }
@@ -880,7 +1142,7 @@ kbd {
   min-height: 50px;
   padding: 0 14px;
   font-family: var(--display);
-  font-size: 14px;
+  font-size: 0.875rem;
   list-style: none;
   cursor: pointer;
 }
@@ -891,7 +1153,7 @@ kbd {
 
 .howto summary::after {
   content: "+";
-  font-size: 22px;
+  font-size: 1.375rem;
   color: var(--muted);
 }
 
@@ -909,7 +1171,7 @@ kbd {
   margin: 0 0 6px;
   font-family: var(--display);
   font-weight: 400;
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--muted);
 }
 
@@ -920,7 +1182,7 @@ kbd {
   gap: 12px;
   padding: 7px 0;
   border-top: 1px solid var(--line);
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   line-height: 1.45;
 }
 
@@ -941,7 +1203,7 @@ kbd {
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   line-height: 1.4;
   color: var(--muted);
 }
@@ -963,18 +1225,22 @@ kbd {
   height: 12px;
 }
 
-.dot-shard   { background: var(--pink); transform: rotate(45deg) scale(0.85); }
-.dot-seeker  { border: 3px solid var(--orange); border-radius: 50%; }
-.dot-laser   { height: 4px; background: var(--red); }
+.dot-shard   { background: var(--c-shard); transform: rotate(45deg) scale(0.85); }
+.dot-seeker  { border: 3px solid var(--c-seeker); border-radius: 50%; }
+.dot-laser   { height: 4px; background: var(--c-laser); }
 .dot-energy  { background: var(--yellow); transform: rotate(45deg) scale(0.8); }
 .dot-power   { background: linear-gradient(90deg, #4dffa6 0 33%, #b388ff 0 66%, #5c8dff 0); }
 .dot-combo   { background: #f4f0ff; transform: rotate(45deg) scale(0.7); }
-.dot-mine    { background: #ff4a3d; border-radius: 50%; }
-.dot-hole    { border: 3px solid #ff2dd2; border-radius: 50%; background: #05010f; }
+.dot-mine    { background: var(--c-mine); border-radius: 50%; }
+.dot-hole    { border: 3px solid var(--c-hole); border-radius: 50%; background: #05010f; }
 .dot-boss    { background: #ff2d6f; }
-.dot-bouncer { border: 3px solid #ff7a5c; }
-.dot-wall    { width: 5px; height: 14px; margin: 0 4px; background: #ff3d6e; }
-.dot-turret  { background: #ffb13d; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+.dot-bouncer { border: 3px solid var(--c-bouncer); }
+.dot-wall    { width: 5px; height: 14px; margin: 0 4px; background: var(--c-wall); }
+.dot-turret  { background: var(--c-turret); clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+
+/* Mode daltonien : mêmes formes que dans le jeu */
+.colorblind .dot-seeker  { border-style: dashed; }
+.colorblind .dot-bouncer { border-style: double; border-width: 4px; }
 
 .c-shield { color: #4dffa6; }
 .c-slow   { color: #b388ff; }
@@ -994,7 +1260,31 @@ kbd {
   background: var(--yellow);
   color: #1a1400;
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 0.6875rem;
+}
+
+/* "Touché par : un laser" + conseil, sous le titre */
+.go-cause {
+  max-width: 440px;
+  margin: 12px auto 0;
+  padding: 4px 0 4px 12px;
+  border-left: 4px solid var(--pink);
+  text-align: left;
+}
+
+.go-cause-what {
+  display: block;
+  font-family: var(--display);
+  font-size: 0.8125rem;
+  color: var(--pink);
+}
+
+.go-cause-tip {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.8438rem;
+  line-height: 1.4;
+  color: var(--text);
 }
 
 .final-score {
@@ -1006,13 +1296,13 @@ kbd {
 
 .final-label {
   font-family: var(--display);
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
 .final-value {
   font-family: var(--display);
-  font-size: clamp(48px, 15vw, 78px);
+  font-size: clamp(3rem, calc(15vw * var(--ui-scale)), 4.875rem);
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
   color: var(--cyan);
@@ -1033,7 +1323,7 @@ kbd {
   padding: 8px 12px;
   border-left: 5px solid var(--badge, var(--yellow));
   background: var(--panel);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.35;
 }
@@ -1049,6 +1339,17 @@ kbd {
 .ach-badge     { --badge: var(--yellow); }
 .mission-badge { --badge: var(--green); }
 .streak-badge  { --badge: var(--orange); }
+
+/* Au-delà de 2 badges, les autres attendent derrière "Et N autres" */
+.badges:not(.open) .badge.extra {
+  display: none;
+}
+
+.badge-more {
+  justify-self: start;
+  min-height: 44px;
+  padding: 6px 12px;
+}
 
 .stats {
   display: grid;
@@ -1070,21 +1371,65 @@ kbd {
 
 .stat span {
   font-family: var(--display);
-  font-size: 17px;
+  font-size: 1.0625rem;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
 .stat small {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--muted);
 }
 
 .progress-line {
   margin: 12px 0 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.4;
   color: var(--muted);
+}
+
+/* Statistiques de fin de partie : plus serrées */
+.stats-compact {
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.stats-compact .stat {
+  gap: 2px;
+  padding: 6px 2px;
+}
+
+.stats-compact .stat span {
+  font-size: 0.9375rem;
+}
+
+.stats-compact .stat small {
+  font-size: 0.6562rem;
+  line-height: 1.2;
+}
+
+/* Fin de partie : la barre des boutons reste collée en bas de l'écran,
+   au-dessus de la barre du bas des iPhone */
+.screen-go {
+  padding-bottom: 0;
+}
+
+.go-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 14px -16px 0;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 2px solid var(--line);
+  background: var(--bg);
+}
+
+.go-actions .btn-row {
+  margin-top: 0;
+}
+
+.go-actions .hint {
+  margin-top: 8px;
 }
 
 /* Animation d'arrivée de l'écran de fin (courte et sobre) */
@@ -1147,11 +1492,11 @@ kbd {
 
 .ship-name {
   font-family: var(--display);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .ship-perk {
-  font-size: 11.5px;
+  font-size: 0.7188rem;
   font-weight: 700;
   color: var(--ship-color);
 }
@@ -1161,7 +1506,7 @@ kbd {
 }
 
 .ship-status {
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--muted);
 }
 
@@ -1201,13 +1546,13 @@ kbd {
 
 .ship-info-title {
   font-family: var(--display);
-  font-size: 15px;
+  font-size: 0.9375rem;
   color: var(--ship-color);
 }
 
 .ship-info-desc {
   margin-top: 4px !important;
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.4;
 }
 
@@ -1217,7 +1562,7 @@ kbd {
   margin: 10px 0 0;
   padding: 0;
   list-style: none;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--muted);
 }
 
@@ -1231,6 +1576,11 @@ kbd {
 
 .ship-needs li.ok::before {
   content: "✓  ";
+}
+
+.ship-try {
+  margin-top: 12px;
+  min-height: 44px;
 }
 
 .themes {
@@ -1275,11 +1625,11 @@ kbd {
 
 .theme-name {
   font-family: var(--display);
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .theme-status {
-  font-size: 10.5px;
+  font-size: 0.6562rem;
   color: var(--muted);
 }
 
@@ -1334,18 +1684,18 @@ kbd {
 
 .mode-name {
   font-family: var(--display);
-  font-size: 16px;
+  font-size: 1rem;
   color: var(--mode, var(--text));
 }
 
 .mode-desc {
-  font-size: 13.5px;
+  font-size: 0.8438rem;
   line-height: 1.4;
   color: var(--muted);
 }
 
 .mode-best {
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   color: var(--muted);
 }
 
@@ -1387,7 +1737,7 @@ kbd {
   height: 20px;
   margin-top: 1px;
   border: 2px solid var(--line-2);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 900;
   line-height: 1;
   color: #1a1400;
@@ -1403,7 +1753,7 @@ kbd {
 }
 
 .ach-name {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 800;
   line-height: 1.3;
 }
@@ -1413,7 +1763,7 @@ kbd {
 }
 
 .ach-desc {
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   line-height: 1.35;
   color: var(--muted);
 }
@@ -1438,7 +1788,7 @@ kbd {
 }
 
 .stats-grid .stat span {
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 /* =====================================================================
@@ -1467,14 +1817,14 @@ kbd {
 
 .setting-name {
   font-family: var(--display);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .setting-name small {
   display: block;
   margin-top: 4px;
   font-family: var(--font);
-  font-size: 12.5px;
+  font-size: 0.7812rem;
   line-height: 1.4;
   color: var(--muted);
 }
@@ -1489,7 +1839,7 @@ kbd {
   grid-column: 2;
   min-width: 3ch;
   font-family: var(--display);
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--cyan);
   text-align: right;
 }
@@ -1498,6 +1848,96 @@ kbd {
   width: 24px;
   height: 24px;
   accent-color: var(--cyan);
+}
+
+/* Sauvegarde par code */
+.save-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.save-actions .btn {
+  min-height: 44px;
+}
+
+.save-panel {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.save-label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.save-code {
+  width: 100%;
+  min-height: 96px;
+  padding: 8px 10px;
+  border: 2px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: 1rem/1.35 var(--mono); /* 16 px minimum : l'iPhone ne zoome pas sur le champ */
+  word-break: break-all;
+  resize: vertical;
+  -webkit-user-select: text;
+  user-select: text;
+  outline: none;
+}
+
+.save-code:focus {
+  border-color: var(--cyan);
+}
+
+.save-msg {
+  margin: 0;
+  font-size: 0.8438rem;
+  line-height: 1.4;
+  color: var(--green);
+}
+
+.save-msg:empty {
+  display: none;
+}
+
+.save-msg.error {
+  color: var(--pink);
+}
+
+.save-confirm {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-left: 5px solid var(--yellow);
+  background: var(--panel-2);
+}
+
+.save-preview {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.save-warn {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--yellow);
+}
+
+/* Réglages rapides de la pause */
+.pause-settings {
+  margin-top: 16px;
+  gap: 6px;
+  text-align: left;
+}
+
+.pause-settings .setting {
+  padding: 9px 12px;
 }
 
 /* Choix à plusieurs boutons collés (difficulté, joystick, onglets) */
@@ -1516,7 +1956,7 @@ kbd {
   background: var(--panel-2);
   color: var(--muted);
   font-family: var(--display);
-  font-size: 12px;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 
@@ -1548,7 +1988,7 @@ kbd {
 
 .rank-text {
   font-family: var(--display);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .rank-text:empty {
@@ -1566,7 +2006,7 @@ kbd {
 }
 
 .pseudo-label {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
   color: var(--muted);
 }
@@ -1589,7 +2029,7 @@ kbd {
   border-radius: var(--radius);
   background: var(--bg);
   color: var(--text);
-  font: 600 16px var(--font); /* 16 px minimum : l'iPhone ne zoome pas sur le champ */
+  font: 600 1rem var(--font); /* 16 px minimum : l'iPhone ne zoome pas sur le champ */
   -webkit-user-select: text;
   user-select: text;
   outline: none;
@@ -1610,7 +2050,7 @@ kbd {
 .pseudo-msg {
   margin: 0;
   min-height: 1.3em;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--muted);
 }
 
@@ -1640,7 +2080,7 @@ kbd {
   align-items: center;
   gap: 0 8px;
   margin: 0;
-  font-size: 15px;
+  font-size: 0.9375rem;
   color: var(--muted);
 }
 
@@ -1669,7 +2109,7 @@ kbd {
 
 .lb-rank {
   font-family: var(--display);
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--muted);
   text-align: center;
 }
@@ -1687,7 +2127,7 @@ kbd {
 
 .lb-score {
   font-family: var(--display);
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--yellow);
 }
 
@@ -1711,7 +2151,7 @@ kbd {
   inset: auto 16px 40%;
   z-index: 10;
   text-align: center;
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 /* =====================================================================
@@ -1726,12 +2166,17 @@ kbd {
 }
 
 @media (max-width: 480px) {
+  /* Le score ne doit jamais toucher les boutons pause et son, même avec un gros record */
   #hud {
-    gap: 14px;
+    gap: 12px;
   }
 
   .hud-value {
-    font-size: 20px;
+    font-size: min(1.25rem, 20px, 5.2vw);
+  }
+
+  .ui-large #hud {
+    gap: 10px;
   }
 
   .ctrl-row {
@@ -1746,15 +2191,15 @@ kbd {
   }
 
   .stat span {
-    font-size: 15px;
+    font-size: 0.9375rem;
   }
 
   .stat small {
-    font-size: 10px;
+    font-size: 0.625rem;
   }
 
   .stats-grid .stat span {
-    font-size: 14px;
+    font-size: 0.875rem;
   }
 
   .achievements {
@@ -1766,9 +2211,73 @@ kbd {
   }
 }
 
+/* Téléphone en paysage (écran bas) : moins de marge en haut, textes plus petits,
+   les 3 boutons de fin de partie sur une seule ligne */
+@media (max-height: 500px) and (min-width: 600px) {
+  .screen {
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+  }
+
+  .screen-go {
+    padding-bottom: 0;
+  }
+
+  .gameover-title {
+    font-size: 1.75rem;
+  }
+
+  .pause-title {
+    font-size: 2.125rem;
+  }
+
+  .pause-settings {
+    margin-top: 10px;
+  }
+
+  .pause-settings .setting {
+    padding: 6px 12px;
+  }
+
+  #screen-pause .btn-row {
+    margin-top: 12px;
+  }
+
+  #screen-pause .btn-row .btn-primary {
+    flex: 1 1 auto;
+  }
+
+  .final-score {
+    margin: 8px 0 2px;
+  }
+
+  .final-value {
+    font-size: 2.875rem;
+  }
+
+  .go-actions {
+    padding-top: 8px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .go-actions .btn-row .btn-primary {
+    flex: 2 1 auto;
+  }
+
+  .go-actions .btn-row .btn {
+    min-height: 46px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .go-actions .hint {
+    display: none;
+  }
+}
+
 /* Réglage "réduire les effets" et préférence du système : pas d'animation */
 .reduce-fx .pu-chip.ending,
 .reduce-fx .toast,
+.reduce-fx .tip,
 .reduce-fx .ship-tile.shake,
 .reduce-fx .theme-tile.shake,
 .reduce-fx #screen-gameover.visible .panel {
@@ -1778,6 +2287,7 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .pu-chip.ending,
   .toast,
+  .tip,
   .ship-tile.shake,
   .theme-tile.shake,
   #screen-gameover.visible .panel {

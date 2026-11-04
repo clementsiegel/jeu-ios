@@ -48,8 +48,20 @@
       </div>
     </div>
 
+    <!-- Essai d'un vaisseau : remplace le score pendant 20 s -->
+    <div id="trial-bar" class="trial-bar hidden" role="status">
+      <span id="trial-text" class="trial-text">ESSAI</span>
+      <span class="trial-track"><i id="trial-fill"></i></span>
+    </div>
+
     <!-- Notification de succès (placée sous le score par game.js) -->
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+    <!-- Astuce : la première fois qu'un élément apparaît (placée par game.js) -->
+    <div id="tip" class="tip hidden" role="status" aria-live="polite">
+      <span class="tip-label">Astuce</span>
+      <span class="tip-text" id="tip-text"></span>
+    </div>
 
     <!-- Tutoriel du premier lancement -->
     <div id="tuto" class="tuto hidden" role="status" aria-live="polite">
@@ -82,6 +94,12 @@
     <!-- ===== Écran d'accueil ===== -->
     <section id="screen-menu" class="screen screen-menu" aria-labelledby="menu-title">
       <div class="panel">
+        <!-- Nouvelle version téléchargée : affiché seulement dans le menu (rempli par game.js) -->
+        <div id="update-bar" class="update-bar hidden" role="status" aria-live="polite">
+          <span class="update-text">Nouvelle version prête</span>
+          <button type="button" id="btn-reload" class="btn btn-small btn-primary">Recharger</button>
+        </div>
+
         <header class="logo">
           <h1 id="menu-title" class="logo-title"><span class="logo-a">Éclats</span><span class="logo-b">Néon</span></h1>
           <p class="tagline">Esquive, frôle, ramasse l'énergie. Tiens le plus longtemps possible.</p>
@@ -97,7 +115,12 @@
             <span class="menu-row-name">Classement</span><span class="menu-row-info">en ligne</span>
           </button>
           <button type="button" id="btn-ships" class="menu-row" style="--row: var(--cyan)">
-            <span class="menu-row-name">Vaisseaux</span><span class="menu-row-info" id="menu-info-ships"></span>
+            <span class="menu-row-name">Vaisseaux</span>
+            <!-- Prochain vaisseau à débloquer : nom, progression et barre (rempli par game.js) -->
+            <span class="menu-row-info menu-goal" id="menu-info-ships">
+              <span id="menu-goal-text"></span>
+              <span class="goal-bar" id="menu-goal-bar"><i id="menu-goal-fill"></i></span>
+            </span>
           </button>
           <button type="button" id="btn-achievements" class="menu-row" style="--row: var(--green)">
             <span class="menu-row-name">Succès</span><span class="menu-row-info" id="menu-info-ach"></span>
@@ -106,6 +129,35 @@
             <span class="menu-row-name">Réglages</span><span class="menu-row-info"></span>
           </button>
         </nav>
+
+        <!-- Installer le jeu sur l'écran d'accueil (affiché une seule fois, par game.js) -->
+        <section id="install-card" class="install-card hidden" aria-labelledby="install-title">
+          <h2 id="install-title" class="install-title">Installe le jeu</h2>
+          <!-- iPhone et iPad (Safari) : schéma des 2 étapes -->
+          <div id="install-ios">
+            <p class="install-text">Pour jouer en plein écran : <b>Partager</b>, puis <b>Sur l'écran d'accueil</b>.</p>
+            <div class="install-steps" aria-hidden="true">
+              <span class="install-step">
+                <span class="install-num">1</span>
+                <svg viewBox="0 0 32 32"><path d="M11 13H8v14h16V13h-3"/><path d="M16 20V4M10.5 9.5 16 4l5.5 5.5"/></svg>
+                <small>Partager</small>
+              </span>
+              <svg class="install-arrow" viewBox="0 0 16 32"><path d="M4 9l8 7-8 7"/></svg>
+              <span class="install-step">
+                <span class="install-num">2</span>
+                <svg viewBox="0 0 32 32"><rect x="5" y="5" width="22" height="22" rx="4"/><path d="M16 10.5v11M10.5 16h11"/></svg>
+                <small>Sur l'écran d'accueil</small>
+              </span>
+            </div>
+            <p class="install-note">Pas de bouton Partager en bas ? Il est dans le menu&nbsp;«&nbsp;⋯&nbsp;».</p>
+          </div>
+          <!-- Android et Chrome : bouton "Installer" -->
+          <p id="install-android" class="install-text hidden">Il s'ouvre en plein écran et marche même sans internet.</p>
+          <div class="install-actions">
+            <button type="button" id="btn-install" class="btn btn-small btn-primary hidden">Installer</button>
+            <button type="button" id="btn-install-ok" class="btn btn-small">Compris</button>
+          </div>
+        </section>
 
         <div class="scoreboard">
           <div><span class="sb-label">Record</span><strong id="menu-best">0</strong></div>
@@ -131,7 +183,7 @@
                 <span class="action">Se déplacer</span>
               </div>
               <div class="ctrl-row">
-                <span class="keys">Tape l'écran, ou un 2ᵉ doigt</span>
+                <span class="keys" id="howto-dash">Tape l'écran, ou un 2ᵉ doigt</span>
                 <span class="action">Dash (invincible un instant)</span>
               </div>
               <div class="ctrl-row">
@@ -173,7 +225,24 @@
     <section id="screen-pause" class="screen screen-center" aria-labelledby="pause-title">
       <div class="panel panel-small">
         <h2 id="pause-title" class="screen-title pause-title">Pause</h2>
-        <p class="hint">Échap ou P pour reprendre.</p>
+        <p class="hint hide-touch">Échap ou P pour reprendre.</p>
+        <!-- Réglages rapides (les mêmes que dans Réglages) -->
+        <div class="settings pause-settings">
+          <label class="setting">
+            <span class="setting-name">Musique</span>
+            <input type="range" id="pause-music" min="0" max="100" step="5">
+            <output id="pause-music-val">60</output>
+          </label>
+          <label class="setting">
+            <span class="setting-name">Effets sonores</span>
+            <input type="range" id="pause-sfx" min="0" max="100" step="5">
+            <output id="pause-sfx-val">100</output>
+          </label>
+          <label class="setting setting-check">
+            <span class="setting-name">Réduire les effets</span>
+            <input type="checkbox" id="pause-reduce">
+          </label>
+        </div>
         <div class="btn-row">
           <button type="button" id="btn-resume" class="btn btn-primary">Reprendre</button>
           <button type="button" id="btn-quit" class="btn">Menu principal</button>
@@ -182,10 +251,15 @@
     </section>
 
     <!-- ===== Écran de fin de partie ===== -->
-    <section id="screen-gameover" class="screen screen-center" aria-labelledby="go-title">
+    <section id="screen-gameover" class="screen screen-center screen-go" aria-labelledby="go-title">
       <div class="panel panel-small">
         <p id="go-mode" class="mode-tag hidden">Défi du jour</p>
         <h2 id="go-title" class="screen-title gameover-title">Partie terminée</h2>
+        <!-- Ce qui t'a touché + un conseil (rempli par game.js) -->
+        <p id="go-cause" class="go-cause hidden">
+          <span id="go-cause-what" class="go-cause-what"></span>
+          <span id="go-cause-tip" class="go-cause-tip"></span>
+        </p>
 
         <div class="final-score">
           <span class="final-label">Score</span>
@@ -198,6 +272,8 @@
           <p id="go-ach" class="badge ach-badge hidden"></p>
           <p id="go-missions" class="badge mission-badge hidden"></p>
           <p id="go-streak" class="badge streak-badge hidden"></p>
+          <!-- Plus de 2 badges : les autres sont cachés derrière ce bouton -->
+          <button type="button" id="btn-go-more" class="link-btn badge-more hidden" aria-expanded="false">Et 3 autres</button>
         </div>
 
         <!-- Classement en ligne : place obtenue, ou choix du pseudo (rempli par game.js) -->
@@ -216,7 +292,7 @@
           </form>
         </div>
 
-        <div class="stats">
+        <div class="stats stats-compact">
           <div class="stat"><span id="go-best">0</span><small id="go-best-label">Record</small></div>
           <div class="stat"><span id="go-time">0:00</span><small>Temps</small></div>
           <div class="stat"><span id="go-level">1</span><small>Niveau</small></div>
@@ -228,12 +304,15 @@
         </div>
         <p id="go-progress" class="progress-line"></p>
 
-        <div class="btn-row">
-          <button type="button" id="btn-replay" class="btn btn-primary">Rejouer</button>
-          <button type="button" id="btn-share" class="btn">Partager</button>
-          <button type="button" id="btn-menu" class="btn">Menu</button>
+        <!-- Barre collée en bas de l'écran : "Rejouer" toujours visible sans défiler -->
+        <div class="go-actions">
+          <div class="btn-row">
+            <button type="button" id="btn-replay" class="btn btn-primary">Rejouer</button>
+            <button type="button" id="btn-share" class="btn">Partager</button>
+            <button type="button" id="btn-menu" class="btn">Menu</button>
+          </div>
+          <p class="hint hide-touch">Entrée pour rejouer.</p>
         </div>
-        <p class="hint hide-touch">Entrée pour rejouer.</p>
       </div>
     </section>
 
@@ -379,16 +458,82 @@
               <button type="button" data-size="large">Grand</button>
             </div>
           </div>
+          <div class="setting setting-stack">
+            <span class="setting-name">Dash au toucher <small id="set-dash-help">Une tape rapide sur l'écran fait un dash. Un 2ᵉ doigt aussi.</small></span>
+            <div class="segmented" id="set-dash" role="group" aria-label="Dash au toucher">
+              <button type="button" data-dash="tap">Tape</button>
+              <button type="button" data-dash="second">2ᵉ doigt</button>
+              <button type="button" data-dash="double">Double tape</button>
+            </div>
+          </div>
+          <div class="setting setting-stack">
+            <span class="setting-name">Taille du texte</span>
+            <div class="segmented" id="set-text" role="group" aria-label="Taille du texte">
+              <button type="button" data-scale="normal">Normal</button>
+              <button type="button" data-scale="large">Grand</button>
+              <button type="button" data-scale="xlarge">Très grand</button>
+            </div>
+          </div>
           <label class="setting setting-check">
             <span class="setting-name">Réduire les effets <small>Tremblements, flashs, particules</small></span>
             <input type="checkbox" id="set-reduce">
+          </label>
+          <label class="setting setting-check">
+            <span class="setting-name">Mode daltonien <small>Couleurs et formes des dangers plus faciles à distinguer</small></span>
+            <input type="checkbox" id="set-colorblind">
           </label>
           <div class="setting">
             <span class="setting-name">Tutoriel</span>
             <button type="button" id="btn-tuto-again" class="btn btn-small">Revoir</button>
           </div>
+          <div class="setting" id="install-setting">
+            <span class="setting-name">Installer le jeu <small id="install-setting-text">Plein écran, et il marche sans internet</small></span>
+            <button type="button" id="btn-install-again" class="btn btn-small">Voir</button>
+          </div>
+          <label class="setting setting-check">
+            <span class="setting-name">Astuces <small>Une bulle explique chaque nouveauté, une seule fois</small></span>
+            <input type="checkbox" id="set-tips">
+          </label>
+          <div class="setting">
+            <span class="setting-name">Revoir les astuces</span>
+            <button type="button" id="btn-tips-again" class="btn btn-small">Revoir</button>
+          </div>
         </div>
-        <p class="version-line">Éclats Néon · version <span id="game-version">2.1</span></p>
+
+        <h3 class="sub-title">Sauvegarde</h3>
+        <div class="setting setting-stack save-box">
+          <span class="setting-name">Code de sauvegarde <small>Garde ce code pour retrouver ta progression sur un autre appareil.</small></span>
+          <div class="save-actions">
+            <button type="button" id="btn-save-export" class="btn btn-small">Exporter</button>
+            <button type="button" id="btn-save-import" class="btn btn-small">Importer</button>
+          </div>
+          <!-- Exporter : le code à copier -->
+          <div id="save-export" class="save-panel hidden">
+            <textarea id="save-export-code" class="save-code" rows="4" readonly aria-label="Ton code de sauvegarde"></textarea>
+            <div class="save-actions">
+              <button type="button" id="btn-save-copy" class="btn btn-small btn-primary">Copier</button>
+            </div>
+            <p id="save-export-msg" class="save-msg" role="status" aria-live="polite"></p>
+          </div>
+          <!-- Importer : coller un code, vérifier, puis confirmer -->
+          <div id="save-import" class="save-panel hidden">
+            <label for="save-import-code" class="save-label">Colle ton code ici</label>
+            <textarea id="save-import-code" class="save-code" rows="4" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"></textarea>
+            <div class="save-actions">
+              <button type="button" id="btn-save-check" class="btn btn-small btn-primary">Vérifier</button>
+            </div>
+            <p id="save-import-msg" class="save-msg" role="status" aria-live="polite"></p>
+            <div id="save-confirm" class="save-confirm hidden">
+              <p id="save-preview" class="save-preview"></p>
+              <p class="save-warn">Ta progression actuelle sera remplacée.</p>
+              <div class="save-actions">
+                <button type="button" id="btn-save-apply" class="btn btn-small btn-primary">Remplacer</button>
+                <button type="button" id="btn-save-cancel" class="btn btn-small">Annuler</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="version-line">Éclats Néon · version <span id="game-version">2.2</span></p>
       </div>
     </section>
 

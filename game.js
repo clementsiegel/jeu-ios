@@ -29,7 +29,7 @@
   // Version du jeu, affichée dans les Réglages. À augmenter à chaque mise à jour :
   // grosse mise à jour 1.8 -> 1.9, petite correction 1.8 -> 1.81 -> 1.82.
   // Penser à mettre la même dans VERSION, en haut de sw.js (mode hors ligne).
-  const GAME_VERSION = '2.1';
+  const GAME_VERSION = '2.2';
 
   // --- Classement en ligne (Supabase) ---
   // Les 2 codes se trouvent dans Supabase, bouton "Connect" du projet
@@ -63,6 +63,8 @@
     JOYSTICK_MARGIN: 20,     // espace sous le joystick "repère" (en plus de la barre du bas des iPhone)
     TAP_TIME: 220,           // un doigt levé avant ce délai (ms)...
     TAP_MOVE: 14,            // ...et qui a bougé de moins de 14 px = une tape = un dash
+    DOUBLE_TAP_TIME: 400,    // réglage "Double tape" : 2 tapes en moins de 400 ms...
+    DOUBLE_TAP_DIST: 70,     // ...à moins de 70 px l'une de l'autre
     DASH_SPEED: 1150,
     DASH_DURATION: 0.17,     // secondes d'invincibilité pendant le dash
     DASH_COOLDOWN: 1.1,      // secondes avant de pouvoir refaire un dash
@@ -239,6 +241,8 @@
     CHAOS_SPEED: 1.3,
     CHAOS_SPAWN: 0.65,
     CHAOS_LEVEL_DURATION: 10,
+    TRIAL_DURATION: 20,        // essai d'un vaisseau : 20 secondes
+    TRIAL_LEVEL: 3,            // avec les dangers du niveau 3
 
     // --- Missions du jour et série ---
     STREAK_BONUS: 5000,        // points tous les 7 jours de suite au défi du jour
@@ -260,6 +264,7 @@
     FLASH_DECAY: 2.2,
     SCORE_COUNT_DURATION: 0.9,
     GAMEOVER_INPUT_DELAY: 500, // ms avant que Entrée puisse relancer (évite les relances par accident)
+    TIP_DURATION: 3,         // secondes d'affichage d'une astuce
     VOLUME: 0.45,
 
     // --- Sauvegarde ---
@@ -282,6 +287,8 @@
     STORAGE_KEY_STREAK: 'eclatsNeon.serie',
     STORAGE_KEY_STATS: 'eclatsNeon.stats',
     STORAGE_KEY_THEME: 'eclatsNeon.theme',
+    STORAGE_KEY_TIPS: 'eclatsNeon.astuces',    // astuces déjà vues (une seule fois chacune)
+    STORAGE_KEY_INSTALL: 'eclatsNeon.installVu', // carte "Installe le jeu" déjà fermée
     // Changer ce numéro efface la progression de TOUS les joueurs
     // (records, points, vaisseaux, succès) au lancement suivant. Le réglage du son est gardé.
     DATA_VERSION: '2',
@@ -294,7 +301,7 @@
     player: '#3ef2ff',
     playerCore: '#eaffff',
     shard: '#ff3d8b',
-    shardFill: 'rgba(255, 61, 139, 0.16)',
+    shardFill: 'rgba(255, 61, 139, 0.16)', // les couleurs "Fill" et "Halo" sont recalculées par applyPalette
     shardHalo: 'rgba(255, 61, 139, 0.28)',
     seeker: '#ff9d3d',
     seekerHalo: 'rgba(255, 157, 61, 0.3)',
@@ -312,7 +319,10 @@
     boss: '#ff2d6f',
     bossCore: '#ffb13d',
     bouncer: '#ff7a5c',
+    bouncerFill: 'rgba(255, 122, 92, 0.16)',
+    bouncerHalo: 'rgba(255, 122, 92, 0.3)',
     wall: '#ff3d6e',
+    wallCore: '#ffd6e2',
     turret: '#ffb13d',
     bullet: '#ffd08a',
     mini: '#7dffea',
@@ -321,6 +331,38 @@
     text: '#e8f7ff',
     white: '#ffffff',
   };
+
+  // Mode daltonien (Réglages) : le rose et l'orange des dangers se ressemblent pour
+  // beaucoup de daltoniens. Cette palette les sépare (vérifié avec une simulation de
+  // protanopie et de deutéranopie) et garde un contraste d'au moins 7:1 sur le fond.
+  // Les formes changent aussi (traqueur en pointillés, rebondisseur à double bord…).
+  const BASE_COLORS = Object.assign({}, COLORS);
+  const COLORBLIND_COLORS = {
+    shard: '#ff4fae',
+    splitCrack: '#ffe0f0',
+    seeker: '#ff6a00',
+    bouncer: '#ffd0a0',
+    bullet: '#ffe8c0',
+    turret: '#ffb000',
+    laser: '#ff57e4',
+    laserCore: '#fff0fb',
+    mine: '#ff6a00',
+    mineRing: '#ffb000',
+    hole: '#ff4fd8',
+    wall: '#ff57e4',
+    wallCore: '#ffe0f7',
+  };
+  // Taille du texte (Réglages) : ui = interface (variable CSS --ui-scale),
+  // canvas = textes dessinés dans le jeu (+20 % au maximum)
+  const TEXT_SCALES = {
+    normal: { ui: 1, canvas: 1 },
+    large:  { ui: 1.15, canvas: 1.1 },
+    xlarge: { ui: 1.3, canvas: 1.2 },
+  };
+  let canvasTextScale = 1;
+
+  const DASH_SEEKER = [4, 3]; // contour en pointillés des traqueurs (mode daltonien)
+  const NO_DASH = [];
 
   // Police des textes du jeu : la même que l'interface (fonts/bungee.woff2)
   const FONT = '"Bungee", "Arial Black", system-ui, sans-serif';
@@ -339,6 +381,28 @@
   };
   const POWERUP_TYPES = Object.keys(POWERUPS);
   const TIMED_POWERUPS = POWERUP_TYPES.filter(function (t) { return !!POWERUPS[t].durationKey; });
+
+  // Astuces : une bulle courte (10 mots maximum) la première fois qu'un élément
+  // apparaît ou est ramassé. c : couleur de la bande (nom dans COLORS).
+  const TIPS = {
+    laser:    { c: 'laser',   text: 'Laser : sors de la ligne avant le tir.' },
+    mine:     { c: 'mine',    text: 'Mine : elle explose en anneau. Éloigne-toi !' },
+    hole:     { c: 'hole',    text: 'Trou noir : il t\'attire. Fuis avec un dash.' },
+    wall:     { c: 'wall',    text: 'Mur : passe par le trou avant qu\'il arrive.' },
+    turret:   { c: 'turret',  text: 'Tourelle : elle te vise. Ne reste pas immobile.' },
+    bouncer:  { c: 'bouncer', text: 'Rebondisseur : il rebondit sur les bords.' },
+    seeker:   { c: 'seeker',  text: 'Traqueur : il te suit. Bouge sans arrêt.' },
+    splitter: { c: 'shard',   text: 'Gros éclat : il se divise en trois morceaux.' },
+    boss:     { c: 'boss',    text: 'Boss bientôt : survis jusqu\'à la fin du chrono.' },
+    shield:   { c: 'shield',  text: 'Bouclier : il encaisse un coup à ta place.' },
+    slow:     { c: 'slow',    text: 'Ralenti : les dangers vont deux fois moins vite.' },
+    magnet:   { c: 'magnet',  text: 'Aimant : l\'énergie proche vient toute seule vers toi.' },
+    mini:     { c: 'mini',    text: 'Mini : ton vaisseau rétrécit, plus dur à toucher.' },
+    double:   { c: 'double',  text: 'Score x2 : tous tes points comptent double.' },
+    bomb:     { c: 'bomb',    text: 'Bombe : tous les dangers à l\'écran explosent.' },
+    combo:    { c: 'combo',   text: 'Combo : enchaîne frôlements et énergie, tes points grimpent.' },
+    graze:    { c: 'player',  text: 'Frôlé ! Passer tout près rapporte des points.' },
+  };
 
   // Durée d'un bonus (le Prisme les fait durer plus longtemps)
   function powerupDuration(type) {
@@ -363,8 +427,25 @@
     bossrush:   { name: 'Boss Rush',        record: 'Record Boss Rush' },
     extreme:    { name: 'Extrême',          record: 'Record Extrême' },
     chaos:      { name: 'Chaos',            record: 'Record Chaos' },
+    trial:      { name: 'Essai',            record: 'Essai' }, // essayer un vaisseau (écran Vaisseaux)
   };
   const EXTRA_MODES = ['bossrush', 'extreme', 'chaos']; // records rangés ensemble
+
+  // Ce qui a touché le joueur : affiché sur l'écran de fin avec un conseil d'une phrase
+  const DEATH_CAUSES = {
+    shard:       { what: 'un éclat', tip: 'Les flèches au bord de l\'écran annoncent les éclats qui arrivent.' },
+    seeker:      { what: 'un traqueur', tip: 'Les traqueurs te suivent un moment : bouge sans arrêt, puis fais un dash.' },
+    bouncer:     { what: 'un rebondisseur', tip: 'Ils rebondissent sur les bords : ne reste pas collé au bord.' },
+    bullet:      { what: 'un tir de tourelle', tip: 'Les tourelles visent l\'endroit où tu es : continue de bouger.' },
+    laser:       { what: 'un laser', tip: 'Les lasers sont annoncés par une ligne : sors-en avant le tir.' },
+    mine:        { what: 'une mine', tip: 'Une mine touchée explose tout de suite : contourne-la.' },
+    'mine-ring': { what: 'l\'explosion d\'une mine', tip: 'Sors de la zone rouge, ou traverse l\'anneau avec un dash.' },
+    hole:        { what: 'un trou noir', tip: 'Le centre est mortel : fais un dash pour échapper à l\'attraction.' },
+    wall:        { what: 'un mur', tip: 'Repère le trou dès l\'alerte et place-toi en face avant que le mur arrive.' },
+    turret:      { what: 'une tourelle', tip: 'Le corps des tourelles est dangereux : garde tes distances.' },
+    boss:        { what: 'le boss', tip: 'Reste loin du boss : il s\'illumine avant chaque attaque.' },
+    beam:        { what: 'un rayon du boss', tip: 'Le rayon tourne dans le sens des flèches : pars dans l\'autre sens.' },
+  };
 
   // Boss : un nouveau à chaque fois, de plus en plus dur. Après le 5ᵉ, ils reviennent
   // en version II, III… (plus rapides, attaques plus serrées, un peu plus longs).
@@ -468,6 +549,9 @@
   function clamp(v, min, max) { return v < min ? min : (v > max ? max : v); }
   function angleDiff(from, to) { return Math.atan2(Math.sin(to - from), Math.cos(to - from)); }
   function $(id) { return document.getElementById(id); }
+  // La clé existe vraiment dans l'objet (pas "constructor", "toString"…)
+  function has(obj, key) { return typeof key === 'string' && Object.prototype.hasOwnProperty.call(obj, key); }
+  function isPlainObject(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
 
   // Supprime d'une liste les éléments qui ne doivent plus exister (sans créer de nouveau tableau)
   function removeDead(list, keep) {
@@ -637,17 +721,47 @@
   // --- Réglages du joueur ---
   const JOYSTICK_SIZES = { small: 48, medium: CONFIG.JOYSTICK_RADIUS, large: 74 };
 
-  function loadSettings() {
-    const s = { music: 60, sfx: 100, joystick: 'medium', reduceFx: false, difficulty: 'normal' };
-    const data = loadJSON(CONFIG.STORAGE_KEY_SETTINGS, null);
-    if (data) {
+  // Dash au toucher : textes du réglage, du tutoriel et de "Comment jouer"
+  // (le 2e doigt, la barre Espace et le clic droit font toujours un dash)
+  const DASH_MODES = {
+    tap: {
+      help: 'Une tape rapide sur l\'écran fait un dash. Un 2ᵉ doigt aussi.',
+      tuto: 'Tape l\'écran (ou avec un 2ᵉ doigt) pour faire un dash, invincible',
+      howto: 'Tape l\'écran, ou un 2ᵉ doigt',
+    },
+    second: {
+      help: 'Seulement avec un 2ᵉ doigt : plus de dash par accident.',
+      tuto: 'Pose un 2ᵉ doigt sur l\'écran pour faire un dash, invincible',
+      howto: 'Un 2ᵉ doigt sur l\'écran',
+    },
+    double: {
+      help: 'Tape deux fois vite sur l\'écran pour un dash. Un 2ᵉ doigt aussi.',
+      tuto: 'Tape deux fois vite l\'écran (ou un 2ᵉ doigt) pour faire un dash, invincible',
+      howto: 'Tape deux fois l\'écran, ou un 2ᵉ doigt',
+    },
+  };
+
+  // Réglages vérifiés un par un : une valeur absente ou bizarre reprend sa valeur par défaut
+  // (sert aussi pour les codes de sauvegarde importés)
+  function sanitizeSettings(data) {
+    const s = { music: 60, sfx: 100, joystick: 'medium', reduceFx: false, difficulty: 'normal', tips: true, dash: 'tap',
+      colorblind: false, textScale: 'normal' };
+    if (isPlainObject(data)) {
       if (Number.isFinite(data.music)) s.music = clamp(Math.round(data.music), 0, 100);
       if (Number.isFinite(data.sfx)) s.sfx = clamp(Math.round(data.sfx), 0, 100);
-      if (JOYSTICK_SIZES[data.joystick]) s.joystick = data.joystick;
-      s.reduceFx = !!data.reduceFx;
-      if (DIFFICULTY[data.difficulty]) s.difficulty = data.difficulty;
+      if (has(JOYSTICK_SIZES, data.joystick)) s.joystick = data.joystick;
+      s.reduceFx = data.reduceFx === true;
+      if (has(DIFFICULTY, data.difficulty)) s.difficulty = data.difficulty;
+      if (typeof data.tips === 'boolean') s.tips = data.tips;
+      if (has(DASH_MODES, data.dash)) s.dash = data.dash;
+      s.colorblind = data.colorblind === true;
+      if (has(TEXT_SCALES, data.textScale)) s.textScale = data.textScale;
     }
     return s;
+  }
+
+  function loadSettings() {
+    return sanitizeSettings(loadJSON(CONFIG.STORAGE_KEY_SETTINGS, null));
   }
 
   const settings = loadSettings();
@@ -658,6 +772,33 @@
 
   function joyRadius() {
     return JOYSTICK_SIZES[settings.joystick] || CONFIG.JOYSTICK_RADIUS;
+  }
+
+  // "#ff6a00" + 0.3 -> "rgba(255, 106, 0, 0.3)" (seulement quand la palette change)
+  function hexAlpha(hex, alpha) {
+    const n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + (n >> 16 & 255) + ', ' + (n >> 8 & 255) + ', ' + (n & 255) + ', ' + alpha + ')';
+  }
+
+  // Applique la palette normale ou celle du mode daltonien (jeu et légende "Comment jouer")
+  function applyPalette() {
+    Object.assign(COLORS, BASE_COLORS, settings.colorblind ? COLORBLIND_COLORS : null);
+    COLORS.shardFill = hexAlpha(COLORS.shard, 0.16);
+    COLORS.shardHalo = hexAlpha(COLORS.shard, 0.28);
+    COLORS.seekerHalo = hexAlpha(COLORS.seeker, 0.3);
+    COLORS.bouncerFill = hexAlpha(COLORS.bouncer, 0.16);
+    COLORS.bouncerHalo = hexAlpha(COLORS.bouncer, 0.3);
+    document.documentElement.classList.toggle('colorblind', settings.colorblind);
+  }
+
+  // Applique la taille du texte : interface (rem) et textes du canvas
+  function applyTextScale() {
+    const t = TEXT_SCALES[settings.textScale] || TEXT_SCALES.normal;
+    const root = document.documentElement;
+    root.style.setProperty('--ui-scale', String(t.ui));
+    root.classList.toggle('ui-large', t.ui > 1);
+    root.classList.toggle('ui-xl', t.ui >= 1.3);
+    canvasTextScale = t.canvas;
   }
 
   // Moins de tremblements, de flashs et de particules (réglage ou préférence du système)
@@ -1156,8 +1297,9 @@
     shownScore: 0,
 
     // Modes : 'normal', 'daily' (défi du jour), 'timeattack' (contre-la-montre), 'zen',
-    // 'bossrush', 'extreme', 'chaos'
+    // 'bossrush', 'extreme', 'chaos', 'trial' (essai d'un vaisseau, 20 s)
     mode: 'normal',
+    trialShip: '', // vaisseau essayé (il ne remplace pas le vaisseau choisi)
     diff: 'normal', // difficulté de la partie en cours
     modeRecords: loadJSON(CONFIG.STORAGE_KEY_MODES, {}), // records Boss Rush, Extrême, Chaos
     dailyKey: '',
@@ -1166,6 +1308,7 @@
     bestTA: loadInt(CONFIG.STORAGE_KEY_TIMEATTACK), // record du contre-la-montre
     newModeRecord: false,
     endReason: 'death', // 'death' ou 'time' (fin du contre-la-montre)
+    deathCause: '',     // ce qui a touché le joueur (voir DEATH_CAUSES)
 
     // Boss de survie
     boss: createBoss(),
@@ -1219,8 +1362,10 @@
     };
   }
 
+  // Vaisseau utilisé : celui qu'on essaie pendant un essai, sinon le vaisseau choisi
   function currentShip() {
-    for (const ship of SHIPS) if (ship.id === game.shipId) return ship;
+    const id = game.trialShip || game.shipId;
+    for (const ship of SHIPS) if (ship.id === id) return ship;
     return SHIPS[0];
   }
 
@@ -1244,6 +1389,12 @@
   }
 
   function diffInfo() { return DIFFICULTY[game.diff] || DIFFICULTY.normal; }
+
+  // Modes où rien n'est enregistré : zen et essai d'un vaisseau
+  // (ni record, ni points, ni missions, ni succès, ni classement ; le zen compte dans les stats)
+  function noRecordMode() {
+    return game.mode === 'zen' || game.mode === 'trial';
+  }
 
   // Modes "classiques" : seuls ceux-là comptent pour les succès de temps et de niveau
   function standardMode() {
@@ -1336,7 +1487,7 @@
 
   // Débloque un succès (jamais en mode zen) : points cumulés + notification
   function unlockAchievement(id) {
-    if (game.mode === 'zen' || ach.unlocked[id]) return;
+    if (noRecordMode() || ach.unlocked[id]) return;
     let info = null;
     for (const a of ACHIEVEMENTS) if (a.id === id) info = a;
     if (!info) return;
@@ -1350,7 +1501,7 @@
 
   // Vérifie les succès liés à la partie en cours
   function checkAchievements() {
-    if (game.mode === 'zen' || !game.player) return;
+    if (noRecordMode() || !game.player) return;
     const s = game.stats;
     if (s.grazes >= 10) unlockAchievement('funambule');
     if (s.bestCombo >= 5) unlockAchievement('combo-parfait');
@@ -1368,7 +1519,7 @@
 
   // En fin de partie : meilleures valeurs + succès de fin
   function finishAchievements(finalScore) {
-    if (game.mode === 'zen') return;
+    if (noRecordMode()) return;
     if (standardMode()) {
       recordBest('time', Math.floor(game.time));
       recordBest('level', game.level);
@@ -1485,24 +1636,28 @@
   // Remet ABSOLUMENT TOUT à zéro pour une nouvelle partie
   function resetGame(mode) {
     game.mode = MODES.indexOf(mode) >= 0 ? mode : 'normal';
-    game.diff = game.mode === 'daily' ? 'normal' : settings.difficulty; // le défi reste le même pour tous
+    if (game.mode !== 'trial') game.trialShip = '';
+    // Le défi du jour reste le même pour tous ; l'essai d'un vaisseau aussi
+    game.diff = game.mode === 'daily' || game.mode === 'trial' ? 'normal' : settings.difficulty;
     game.dailyKey = todayKey();
     game.dailyBest = loadDailyBest(game.dailyKey);
     game.newDailyRecord = false;
     game.newModeRecord = false;
     game.endReason = 'death';
+    game.deathCause = '';
     game.sessionAch = [];
     game.sessionMissions = [];
     game.sessionShips = [];
     game.sessionStreak = '';
     game.missionsCommitted = false;
+    clearTips();
     ensureMissionsDay();
     game.stats.dashes = 0;
     game.stats.bosses = 0;
     game.stats.smashed = 0;
     clearToasts();
     // Tutoriel au tout premier lancement de l'appareil
-    game.tuto.active = storage.get(CONFIG.STORAGE_KEY_TUTO, '') !== '1';
+    game.tuto.active = game.mode !== 'trial' && storage.get(CONFIG.STORAGE_KEY_TUTO, '') !== '1';
     game.tuto.step = 0;
     game.tuto.moved = 0;
     // Défi du jour : la même graine pour tout le monde ce jour-là.
@@ -1542,6 +1697,10 @@
     game.finalScore = 0;
     game.shownScore = 0;
     input.dashQueued = false;
+    if (game.mode === 'trial') {
+      game.level = CONFIG.TRIAL_LEVEL; // dangers du niveau 3 pendant tout l'essai
+      game.powerupTimer = 5;           // un bonus arrive vite (pour voir l'effet du Prisme, par exemple)
+    }
   }
 
   /* ====================================================================
@@ -1566,6 +1725,7 @@
       moved: 0,               // distance maximale parcourue depuis
     },
     joyHome: { x: 0, y: 0 },  // joystick "repère" en bas au milieu, quand on ne touche pas l'écran
+    lastTap: { at: 0, x: 0, y: 0 }, // dernière tape (réglage "Double tape")
   };
 
   const MOVE_KEYS = {
@@ -1611,9 +1771,11 @@
     Sound.unlock();
     const code = e.code;
 
-    // Si un bouton a le focus, Entrée et Espace l'activent normalement
-    const onButton = e.target && e.target.closest && e.target.closest('button');
+    // Si un bouton (ou une case à cocher) a le focus, Entrée et Espace l'activent normalement
+    const onButton = e.target && e.target.closest && e.target.closest('button, input[type="checkbox"]');
     if (onButton && (code === 'Enter' || code === 'NumpadEnter' || code === 'Space')) return;
+    // Les flèches règlent le curseur de volume qui a le focus
+    if (e.target && e.target.type === 'range' && code.indexOf('Arrow') === 0) return;
 
     if (BLOCKED_KEYS.has(code)) e.preventDefault();
     input.keys.add(code);
@@ -1746,13 +1908,32 @@
   function onPointerEnd(e) {
     const ptr = input.pointer;
     if (e.pointerId !== ptr.id) return;
-    // Tape rapide sans glisser = dash
+    // Tape rapide sans glisser
     if (e.type === 'pointerup' && ptr.type === 'touch' &&
         performance.now() - ptr.downAt <= CONFIG.TAP_TIME && ptr.moved <= CONFIG.TAP_MOVE) {
-      requestDash();
+      onTap(ptr.startX, ptr.startY);
     }
     ptr.active = false;
     ptr.id = null;
+  }
+
+  // Une tape sur l'écran : dash selon le réglage "Dash au toucher"
+  function onTap(x, y) {
+    if (settings.dash === 'tap') {
+      requestDash();
+    } else if (settings.dash === 'double') {
+      const last = input.lastTap;
+      const now = performance.now();
+      if (now - last.at <= CONFIG.DOUBLE_TAP_TIME && Math.hypot(x - last.x, y - last.y) <= CONFIG.DOUBLE_TAP_DIST) {
+        last.at = 0;
+        requestDash();
+      } else {
+        last.at = now;
+        last.x = x;
+        last.y = y;
+      }
+    }
+    // 'second' : une tape ne fait rien, seul le 2e doigt fait un dash
   }
 
   // Joystick : direction et force (0 à 1) selon la distance du pouce au centre
@@ -1790,6 +1971,9 @@
 
   const ui = {
     hud: $('hud'),
+    trialBar: $('trial-bar'),
+    trialText: $('trial-text'),
+    trialFill: $('trial-fill'),
     score: $('hud-score'),
     best: $('hud-best'),
     level: $('hud-level'),
@@ -1815,7 +1999,10 @@
     streak: $('streak'),
     statsGrid: $('stats-grid'),
     setDifficulty: $('set-difficulty'),
+    setDash: $('set-dash'),
+    setDashHelp: $('set-dash-help'),
     goStreak: $('go-streak'),
+    goMore: $('btn-go-more'),
     goProgress: $('go-progress'),
     btnReplay: $('btn-replay'),
     powerups: $('powerups'),
@@ -1833,8 +2020,15 @@
     hudBar: $('hud-bar'),
     hudBarFill: $('hud-bar-fill'),
     goTitle: $('go-title'),
+    goCause: $('go-cause'),
+    goCauseWhat: $('go-cause-what'),
+    goCauseTip: $('go-cause-tip'),
     goAch: $('go-ach'),
     toast: $('toast'),
+    tip: $('tip'),
+    tipText: $('tip-text'),
+    setTips: $('set-tips'),
+    btnTipsAgain: $('btn-tips-again'),
     tuto: $('tuto'),
     tutoStep: $('tuto-step'),
     tutoText: $('tuto-text'),
@@ -1846,6 +2040,13 @@
     setSfxVal: $('set-sfx-val'),
     setJoystick: $('set-joystick'),
     setReduce: $('set-reduce'),
+    setColorblind: $('set-colorblind'),
+    setText: $('set-text'),
+    pauseMusic: $('pause-music'),
+    pauseMusicVal: $('pause-music-val'),
+    pauseSfx: $('pause-sfx'),
+    pauseSfxVal: $('pause-sfx-val'),
+    pauseReduce: $('pause-reduce'),
     btnTutoAgain: $('btn-tuto-again'),
     goOnline: $('go-online'),
     goRankRow: $('go-rank-row'),
@@ -1864,6 +2065,7 @@
     lbPseudoMsg: $('lb-pseudo-msg'),
     lbList: $('lb-list'),
     lbStatus: $('lb-status'),
+    updateBar: $('update-bar'),
     current: 'menu', // écran actuellement affiché
     screens: {
       menu: $('screen-menu'),
@@ -1909,11 +2111,15 @@
 
   function updateUI() {
     const s = game.state;
-    ui.hud.classList.toggle('hidden', s === 'menu');
+    const trial = game.mode === 'trial' && s !== 'menu';
+    ui.hud.classList.toggle('hidden', s === 'menu' || trial);
+    ui.trialBar.classList.toggle('hidden', !trial);
     ui.powerups.classList.toggle('hidden', s === 'menu');
     ui.btnPause.classList.toggle('hidden', s !== 'playing');
     ui.tuto.classList.toggle('hidden', !(s === 'playing' && game.tuto.active));
     if (s !== 'playing') ui.toast.classList.add('hidden');
+    ui.tip.classList.toggle('hidden', !(s === 'playing' && tips.current));
+    refreshUpdateBar();
     updateJoystickHome();
   }
 
@@ -1935,6 +2141,7 @@
     score: null, best: null, level: null,
     comboVisible: null, comboMult: null, comboSteps: null, comboRatio: null,
     slotLabel: null, slotBar: null, slotRatio: null,
+    trialLeft: null, trialRatio: null,
   };
 
   // Record affiché selon le mode
@@ -1966,8 +2173,9 @@
     if (game.state === 'menu') return;
     const score = Math.floor(game.score);
     if (score !== hudCache.score) { ui.score.textContent = formatScore(score); hudCache.score = score; }
-    if (game.mode === 'zen') {
-      if (hudCache.best !== 'zen') { ui.best.textContent = 'ZEN'; hudCache.best = 'zen'; }
+    if (noRecordMode()) {
+      const label = game.mode === 'trial' ? 'ESSAI' : 'ZEN';
+      if (hudCache.best !== label) { ui.best.textContent = label; hudCache.best = label; }
     } else {
       const best = Math.max(modeBest(), score);
       if (best !== hudCache.best) { ui.best.textContent = formatScore(best); hudCache.best = best; }
@@ -1981,7 +2189,19 @@
       const r = Math.round(clamp(slot.ratio, 0, 1) * 100) / 100;
       if (r !== hudCache.slotRatio) { ui.hudBarFill.style.transform = 'scaleX(' + r + ')'; hudCache.slotRatio = r; }
     }
+    if (game.mode === 'trial') {
+      // Bandeau "ESSAI : Nova · 14 s"
+      const left = Math.max(0, CONFIG.TRIAL_DURATION - game.time);
+      const secs = Math.ceil(left);
+      if (secs !== hudCache.trialLeft) {
+        ui.trialText.textContent = 'ESSAI : ' + currentShip().name + ' · ' + secs + ' s';
+        hudCache.trialLeft = secs;
+      }
+      const r = Math.round((left / CONFIG.TRIAL_DURATION) * 100) / 100;
+      if (r !== hudCache.trialRatio) { ui.trialFill.style.transform = 'scaleX(' + r + ')'; hudCache.trialRatio = r; }
+    }
     if (!ui.toast.classList.contains('hidden')) placeToast();
+    if (!ui.tip.classList.contains('hidden')) placeTip();
 
     // Combo : multiplicateur, progression vers le suivant et temps restant
     const c = game.combo;
@@ -2065,14 +2285,43 @@
     hudCache.best = null; // force la mise à jour
     hudCache.slotLabel = null;
     hudCache.level = null;
+    hudCache.trialLeft = null;
+    hudCache.trialRatio = null;
+    ui.trialBar.style.setProperty('--ship-color', currentShip().rainbow ? '#ffffff' : currentShip().color);
   }
 
   function refreshMenu() {
     ui.menuBest.textContent = formatScore(game.best);
     ui.menuDaily.textContent = formatScore(loadDailyBest(todayKey()));
-    $('menu-info-ships').textContent = game.owned.length + ' / ' + SHIPS.length;
+    refreshShipGoal();
     $('menu-info-ach').textContent = unlockedCount() + ' / ' + ACHIEVEMENTS.length;
     buildMissionsPanel();
+    refreshInstallCard();
+    refreshDashHelp();
+    refreshUpdateBar();
+  }
+
+  // Menu : prochain vaisseau à débloquer, à droite de "Vaisseaux".
+  // "Delta · 12 %" (points cumulés / prix), ou "Exploit manquant" si seuls les points sont atteints.
+  function refreshShipGoal() {
+    const next = nextShip();
+    const box = $('menu-info-ships');
+    const text = $('menu-goal-text');
+    let ratio = 1;
+    let need = false;
+    if (!next) {
+      text.textContent = SHIPS.length + ' / ' + SHIPS.length;
+    } else if (game.points >= next.cost) {
+      need = true;
+      text.textContent = next.name + ' · Exploit manquant';
+    } else {
+      ratio = game.points / next.cost;
+      text.textContent = next.name + ' · ' + Math.floor(ratio * 100) + ' %';
+    }
+    box.classList.toggle('need', need);
+    $('menu-goal-bar').classList.toggle('hidden', !next);
+    $('menu-goal-fill').style.transform = 'scaleX(' + clamp(ratio, 0, 1) + ')';
+    $('btn-ships').setAttribute('aria-label', 'Vaisseaux. ' + (next ? 'Prochain : ' + text.textContent : 'Tous débloqués'));
   }
 
   // --- Notifications (succès, vaisseau débloqué) ---
@@ -2114,12 +2363,96 @@
   }
 
   // Place la notification juste sous le score, le combo et les bonus : elle ne cache rien
-  function placeToast() {
-    let bottom = ui.hud.getBoundingClientRect().bottom;
+  // Bas du HUD (ou du bandeau d'essai), du combo et des bonus actifs
+  function hudBottom() {
+    let bottom = Math.max(ui.hud.getBoundingClientRect().bottom, ui.trialBar.getBoundingClientRect().bottom);
     for (const el of ui.powerups.children) {
       if (!el.classList.contains('hidden')) bottom = Math.max(bottom, el.getBoundingClientRect().bottom);
     }
-    ui.toast.style.top = Math.round(bottom + 10) + 'px';
+    return bottom;
+  }
+
+  function placeToast() {
+    ui.toast.style.top = Math.round(hudBottom() + 10) + 'px';
+  }
+
+  // --- Astuces au premier contact ---
+  // Une seule bulle à la fois (file d'attente), jamais pendant un boss ni le tutoriel.
+  // Chaque astuce n'apparaît qu'une fois (liste sauvegardée).
+  const tips = { seen: loadTipsSeen(), queue: [], current: '', timer: 0 };
+
+  function loadTipsSeen() {
+    const data = loadJSON(CONFIG.STORAGE_KEY_TIPS, null);
+    const seen = {};
+    if (Array.isArray(data)) for (const id of data) if (has(TIPS, id)) seen[id] = true;
+    return seen;
+  }
+
+  function saveTipsSeen() {
+    storage.set(CONFIG.STORAGE_KEY_TIPS, JSON.stringify(Object.keys(tips.seen)));
+  }
+
+  // Demande une astuce : elle n'est ajoutée que si elle n'a jamais été vue
+  function tipOnce(id) {
+    if (!settings.tips || tips.seen[id] || !has(TIPS, id)) return;
+    if (game.state !== 'playing' || game.tuto.active || game.boss.active) return;
+    if (tips.current === id || tips.queue.indexOf(id) >= 0) return;
+    tips.queue.push(id);
+    if (!tips.current) nextTip();
+  }
+
+  function tipColor(id) {
+    return POWERUPS[id] ? POWERUPS[id].color : COLORS[TIPS[id].c];
+  }
+
+  function nextTip() {
+    tips.current = '';
+    const id = game.boss.active ? '' : tips.queue.shift();
+    if (!id) {
+      ui.tip.classList.add('hidden');
+      return;
+    }
+    tips.current = id;
+    tips.seen[id] = true;
+    saveTipsSeen();
+    ui.tipText.textContent = TIPS[id].text;
+    ui.tip.style.setProperty('--tip', tipColor(id));
+    ui.tip.classList.remove('hidden');
+    // relance l'animation d'apparition
+    ui.tip.style.animation = 'none';
+    void ui.tip.offsetWidth;
+    ui.tip.style.animation = '';
+    placeTip();
+    tips.timer = CONFIG.TIP_DURATION;
+  }
+
+  function updateTips(dt) {
+    if (tips.current) {
+      // Un boss arrive : la bulle disparaît (les suivantes attendent la fin du boss)
+      if (game.boss.active) {
+        tips.current = '';
+        ui.tip.classList.add('hidden');
+        return;
+      }
+      tips.timer -= dt;
+      if (tips.timer <= 0) nextTip();
+    } else if (tips.queue.length && !game.boss.active && !game.tuto.active) {
+      nextTip();
+    }
+  }
+
+  function clearTips() {
+    tips.queue.length = 0;
+    tips.current = '';
+    tips.timer = 0;
+    ui.tip.classList.add('hidden');
+  }
+
+  // La bulle se place sous le score, le combo, les bonus et la notification
+  function placeTip() {
+    let bottom = hudBottom();
+    if (!ui.toast.classList.contains('hidden')) bottom = Math.max(bottom, ui.toast.getBoundingClientRect().bottom);
+    ui.tip.style.top = Math.round(bottom + 10) + 'px';
   }
 
   // --- Sous-écrans du menu ---
@@ -2199,29 +2532,66 @@
       b.classList.toggle('active', on);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
+    for (const b of ui.setDash.querySelectorAll('button')) {
+      const on = b.getAttribute('data-dash') === settings.dash;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    ui.setDashHelp.textContent = DASH_MODES[settings.dash].help;
+    for (const b of ui.setText.querySelectorAll('button')) {
+      const on = b.getAttribute('data-scale') === settings.textScale;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
     ui.setReduce.checked = settings.reduceFx;
+    ui.setColorblind.checked = settings.colorblind;
     const planned = storage.get(CONFIG.STORAGE_KEY_TUTO, '') !== '1';
     ui.btnTutoAgain.textContent = planned ? 'Prévu' : 'Revoir';
+    ui.setTips.checked = settings.tips;
+    refreshInstallSetting();
+    resetSavePanels();
+    ui.btnTipsAgain.textContent = Object.keys(tips.seen).length ? 'Revoir' : 'Prévu';
   }
 
   function applyReduceFx() {
     document.documentElement.classList.toggle('reduce-fx', settings.reduceFx);
   }
 
+  // Réglages rapides de l'écran pause : les mêmes valeurs que dans Réglages
+  function buildPauseSettings() {
+    ui.pauseMusic.value = settings.music;
+    ui.pauseMusicVal.textContent = settings.music;
+    ui.pauseSfx.value = settings.sfx;
+    ui.pauseSfxVal.textContent = settings.sfx;
+    ui.pauseReduce.checked = settings.reduceFx;
+  }
+
+  // Curseur de volume (musique ou effets), dans Réglages ou dans la pause
+  function bindVolume(input, output, key) {
+    input.addEventListener('input', function () {
+      settings[key] = clamp(Math.round(Number(input.value) || 0), 0, 100);
+      output.textContent = settings[key];
+      Sound.applyVolumes();
+      saveSettings();
+    });
+    if (key === 'sfx') input.addEventListener('change', function () { Sound.unlock(); Sound.collect(); }); // aperçu du volume
+  }
+
+  function bindReduceFx(box) {
+    box.addEventListener('change', function () {
+      settings.reduceFx = box.checked;
+      saveSettings();
+      applyReduceFx();
+    });
+  }
+
   function bindSettings() {
-    ui.setMusic.addEventListener('input', function () {
-      settings.music = Number(ui.setMusic.value);
-      ui.setMusicVal.textContent = settings.music;
-      Sound.applyVolumes();
-      saveSettings();
-    });
-    ui.setSfx.addEventListener('input', function () {
-      settings.sfx = Number(ui.setSfx.value);
-      ui.setSfxVal.textContent = settings.sfx;
-      Sound.applyVolumes();
-      saveSettings();
-    });
-    ui.setSfx.addEventListener('change', function () { Sound.unlock(); Sound.collect(); }); // aperçu du volume
+    bindVolume(ui.setMusic, ui.setMusicVal, 'music');
+    bindVolume(ui.setSfx, ui.setSfxVal, 'sfx');
+    bindVolume(ui.pauseMusic, ui.pauseMusicVal, 'music');
+    bindVolume(ui.pauseSfx, ui.pauseSfxVal, 'sfx');
+    bindReduceFx(ui.setReduce);
+    bindReduceFx(ui.pauseReduce);
     for (const b of ui.setJoystick.querySelectorAll('button')) {
       b.addEventListener('click', function () {
         settings.joystick = b.getAttribute('data-size');
@@ -2240,16 +2610,54 @@
         Sound.click();
       });
     }
-    ui.setReduce.addEventListener('change', function () {
-      settings.reduceFx = ui.setReduce.checked;
+    for (const b of ui.setText.querySelectorAll('button')) {
+      b.addEventListener('click', function () {
+        settings.textScale = b.getAttribute('data-scale');
+        saveSettings();
+        applyTextScale();
+        buildSettings();
+        b.focus({ preventScroll: true });
+        b.scrollIntoView({ block: 'nearest' });
+        Sound.click();
+      });
+    }
+    for (const b of ui.setDash.querySelectorAll('button')) {
+      b.addEventListener('click', function () {
+        settings.dash = b.getAttribute('data-dash');
+        saveSettings();
+        buildSettings();
+        refreshDashHelp();
+        Sound.click();
+      });
+    }
+    ui.setColorblind.addEventListener('change', function () {
+      settings.colorblind = ui.setColorblind.checked;
       saveSettings();
-      applyReduceFx();
+      applyPalette();
+    });
+    ui.setTips.addEventListener('change', function () {
+      settings.tips = ui.setTips.checked;
+      saveSettings();
+    });
+    ui.btnTipsAgain.addEventListener('click', function () {
+      // Toutes les astuces pourront réapparaître (et le réglage se rallume)
+      tips.seen = {};
+      saveTipsSeen();
+      settings.tips = true;
+      saveSettings();
+      buildSettings();
+      Sound.click();
     });
     ui.btnTutoAgain.addEventListener('click', function () {
       try { window.localStorage.removeItem(CONFIG.STORAGE_KEY_TUTO); } catch (e) { /* stockage bloqué */ }
       buildSettings();
       Sound.click();
     });
+  }
+
+  // "Comment jouer" : la ligne du dash suit le réglage
+  function refreshDashHelp() {
+    $('howto-dash').textContent = DASH_MODES[settings.dash].howto;
   }
 
   // Prochain vaisseau à débloquer (dans l'ordre)
@@ -2333,7 +2741,16 @@
     desc.textContent = ship.desc;
     el.appendChild(title);
     el.appendChild(desc);
-    if (shipOwned(ship)) return;
+    // Essayer le vaisseau 20 s (verrouillé ou non), sans changer le vaisseau choisi
+    const tryBtn = document.createElement('button');
+    tryBtn.type = 'button';
+    tryBtn.className = 'btn btn-small ship-try';
+    tryBtn.textContent = 'Essayer 20 s';
+    tryBtn.addEventListener('click', function () { Sound.unlock(); startTrial(ship); });
+    if (shipOwned(ship)) {
+      el.appendChild(tryBtn);
+      return;
+    }
     const list = document.createElement('ul');
     list.className = 'ship-needs';
     const addNeed = function (ok, text) {
@@ -2347,6 +2764,7 @@
       (missing > 0 ? ' (encore ' + formatScore(missing) + ')' : ''));
     if (ship.need) addNeed(shipNeedMet(ship), 'Exploit : ' + SHIP_NEEDS[ship.need].text.toLowerCase());
     el.appendChild(list);
+    el.appendChild(tryBtn);
   }
 
   function selectShip(ship, tile) {
@@ -2848,7 +3266,7 @@
 
   // Valeur de la partie en cours (0 si elle est déjà comptée)
   function missionGameValue(stat) {
-    if (game.missionsCommitted || game.mode === 'zen' || !game.player || game.tuto.active) return 0;
+    if (game.missionsCommitted || noRecordMode() || !game.player || game.tuto.active) return 0;
     const st = game.stats;
     switch (stat) {
       case 'grazes': return st.grazes;
@@ -2872,7 +3290,7 @@
   }
 
   function checkMissions() {
-    if (game.mode === 'zen') return;
+    if (noRecordMode()) return;
     const ms = ensureMissionsDay();
     for (const id of ms.ids) {
       if (ms.done[id]) continue;
@@ -2895,7 +3313,7 @@
 
   // Fin de partie : la partie s'ajoute aux missions du jour
   function commitMissions() {
-    if (game.mode === 'zen' || game.missionsCommitted) return;
+    if (noRecordMode() || game.missionsCommitted) return;
     const ms = ensureMissionsDay();
     const add = function (stat, v) { ms.sums[stat] = (ms.sums[stat] || 0) + v; };
     const keepMax = function (stat, v) { ms.maxes[stat] = Math.max(ms.maxes[stat] || 0, v); };
@@ -3063,6 +3481,307 @@
   }
 
   /* ====================================================================
+     SAUVEGARDE PAR CODE (Réglages > Sauvegarde)
+     "Exporter" fabrique un code texte avec toute la progression ; "Importer"
+     le relit sur un autre appareil. Le code est un JSON { v, d, c } écrit en
+     base64 : v = version du format, d = données, c = somme de contrôle.
+     L'identifiant du joueur, le pseudo et les scores en attente ne sont pas
+     dans le code (ils sont liés au classement en ligne).
+     ==================================================================== */
+
+  const SAVE_FORMAT = 1;
+  const SAVE_MAX_LENGTH = 20 * 1024; // un code plus long est refusé
+  const SAVE_FIELDS = ['points', 'owned', 'ship', 'theme', 'best', 'ta', 'modes', 'ach', 'stats', 'streak', 'tuto', 'settings', 'tips'];
+  const ACH_BEST_KEYS = ['time', 'level', 'grazes', 'combo', 'energy', 'timeattack', 'streak'];
+  const BIG_NUMBER = 1e12;
+
+  function saveChecksum(d) {
+    return hashString('eclats-neon:' + JSON.stringify(d));
+  }
+
+  function toBase64(text) {
+    const bytes = new TextEncoder().encode(text);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+
+  function fromBase64(code) {
+    const bin = atob(code);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  }
+
+  function wholeNumber(v) { return Math.max(0, Math.floor(Number(v) || 0)); }
+  function isCount(v, max) { return Number.isInteger(v) && v >= 0 && v <= max; }
+
+  // Toute la progression, prête à être mise dans un code
+  function buildSaveData() {
+    const modes = {};
+    for (const m of EXTRA_MODES) if (game.modeRecords[m] > 0) modes[m] = wholeNumber(game.modeRecords[m]);
+    const unlocked = {};
+    for (const a of ACHIEVEMENTS) if (ach.unlocked[a.id]) unlocked[a.id] = true;
+    const best = {};
+    for (const k of ACH_BEST_KEYS) if (ach.best[k] > 0) best[k] = wholeNumber(ach.best[k]);
+    const stats = loadStats();
+    for (const k of STAT_KEYS) stats[k] = wholeNumber(stats[k]);
+    const streak = loadStreak();
+    return {
+      points: wholeNumber(game.points),
+      owned: game.owned.slice(),
+      ship: game.shipId,
+      theme: game.themeId,
+      best: wholeNumber(game.best),
+      ta: wholeNumber(game.bestTA),
+      modes: modes,
+      ach: { unlocked: unlocked, best: best, dashes: wholeNumber(ach.dashes), missions: wholeNumber(ach.missions) },
+      stats: stats,
+      streak: { last: streak.last, count: wholeNumber(streak.count), best: wholeNumber(streak.best) },
+      tuto: storage.get(CONFIG.STORAGE_KEY_TUTO, '') === '1',
+      settings: sanitizeSettings(settings),
+      tips: Object.keys(tips.seen),
+    };
+  }
+
+  function makeSaveCode() {
+    const d = buildSaveData();
+    return toBase64(JSON.stringify({ v: SAVE_FORMAT, d: d, c: saveChecksum(d) }));
+  }
+
+  function knownShip(id) { return SHIPS.some(function (s) { return s.id === id; }); }
+  function themeById(id) {
+    for (const t of THEMES) if (t.id === id) return t;
+    return null;
+  }
+
+  // Vérifie chaque donnée (type, limites, vaisseaux et succès connus). null si quelque chose cloche.
+  function validateSaveData(d) {
+    if (!isPlainObject(d)) return null;
+    for (const key in d) if (SAVE_FIELDS.indexOf(key) < 0) return null;
+    for (const key of SAVE_FIELDS) if (!has(d, key)) return null;
+    if (!isCount(d.points, BIG_NUMBER) || !isCount(d.best, BIG_NUMBER) || !isCount(d.ta, BIG_NUMBER)) return null;
+
+    if (!Array.isArray(d.owned) || d.owned.length > SHIPS.length) return null;
+    const owned = ['fleche'];
+    for (const id of d.owned) {
+      if (typeof id !== 'string' || !knownShip(id)) return null;
+      if (owned.indexOf(id) < 0) owned.push(id);
+    }
+    if (typeof d.ship !== 'string' || !knownShip(d.ship)) return null;
+    const theme = typeof d.theme === 'string' ? themeById(d.theme) : null;
+    if (!theme) return null;
+
+    if (!isPlainObject(d.modes)) return null;
+    const modes = {};
+    for (const m in d.modes) {
+      if (EXTRA_MODES.indexOf(m) < 0 || !isCount(d.modes[m], BIG_NUMBER)) return null;
+      modes[m] = d.modes[m];
+    }
+
+    const a = d.ach;
+    if (!isPlainObject(a) || !isPlainObject(a.unlocked) || !isPlainObject(a.best)) return null;
+    if (!isCount(a.dashes, BIG_NUMBER) || !isCount(a.missions, BIG_NUMBER)) return null;
+    const unlocked = {};
+    for (const id in a.unlocked) {
+      if (a.unlocked[id] !== true || !ACHIEVEMENTS.some(function (x) { return x.id === id; })) return null;
+      unlocked[id] = true;
+    }
+    const best = {};
+    for (const k in a.best) {
+      if (ACH_BEST_KEYS.indexOf(k) < 0 || !isCount(a.best[k], BIG_NUMBER)) return null;
+      best[k] = a.best[k];
+    }
+
+    if (!isPlainObject(d.stats)) return null;
+    const stats = {};
+    for (const k in d.stats) if (STAT_KEYS.indexOf(k) < 0) return null;
+    for (const k of STAT_KEYS) {
+      if (!isCount(d.stats[k], BIG_NUMBER)) return null;
+      stats[k] = d.stats[k];
+    }
+
+    const st = d.streak;
+    if (!isPlainObject(st) || typeof st.last !== 'string' || (st.last && !/^\d{4}-\d{2}-\d{2}$/.test(st.last))) return null;
+    if (!isCount(st.count, 100000) || !isCount(st.best, 100000)) return null;
+
+    if (typeof d.tuto !== 'boolean' || !isPlainObject(d.settings)) return null;
+    if (!Array.isArray(d.tips) || d.tips.length > 100) return null;
+    for (const id of d.tips) if (!has(TIPS, id)) return null;
+
+    return {
+      points: d.points,
+      owned: owned,
+      ship: owned.indexOf(d.ship) >= 0 ? d.ship : 'fleche',
+      theme: theme.cost <= d.points ? theme.id : 'neon',
+      best: d.best,
+      ta: d.ta,
+      modes: modes,
+      ach: { unlocked: unlocked, best: best, dashes: a.dashes, missions: a.missions },
+      stats: stats,
+      streak: { last: st.last, count: st.count, best: st.best },
+      tuto: d.tuto,
+      settings: sanitizeSettings(d.settings),
+      tips: d.tips.slice(),
+    };
+  }
+
+  // Lit un code collé par le joueur. Renvoie { data } ou { error: "texte à afficher" }
+  function parseSaveCode(text) {
+    const code = String(text || '').replace(/\s+/g, '');
+    const broken = { error: 'Code abîmé : vérifie que tu l\'as copié en entier.' };
+    if (!code) return { error: 'Colle d\'abord ton code dans la case.' };
+    if (code.length > SAVE_MAX_LENGTH) return { error: 'Ce code est trop long : ce n\'est pas un code d\'Éclats Néon.' };
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(code)) return { error: 'Ce n\'est pas un code d\'Éclats Néon.' };
+    let obj = null;
+    try {
+      obj = JSON.parse(fromBase64(code));
+    } catch (e) {
+      return broken;
+    }
+    if (!isPlainObject(obj)) return broken;
+    if (obj.v !== SAVE_FORMAT) return { error: 'Ce code vient d\'une autre version du jeu.' };
+    if (!isPlainObject(obj.d) || obj.c !== saveChecksum(obj.d)) return broken;
+    const data = validateSaveData(obj.d);
+    return data ? { data: data } : broken;
+  }
+
+  // "42 000 points, 3 vaisseaux, 7 succès"
+  function savePreview(d) {
+    const ships = d.owned.length;
+    const achs = Object.keys(d.ach.unlocked).length;
+    return formatScore(d.points) + ' points, ' + ships + (ships > 1 ? ' vaisseaux, ' : ' vaisseau, ') +
+      achs + ' succès';
+  }
+
+  // Remplace la progression de l'appareil. Renvoie false si le stockage est bloqué.
+  function applySaveData(d) {
+    storage.set(CONFIG.STORAGE_KEY_POINTS, d.points);
+    storage.set(CONFIG.STORAGE_KEY_OWNED, JSON.stringify(d.owned));
+    storage.set(CONFIG.STORAGE_KEY_SHIP, d.ship);
+    storage.set(CONFIG.STORAGE_KEY_THEME, d.theme);
+    storage.set(CONFIG.STORAGE_KEY_BEST, d.best);
+    storage.set(CONFIG.STORAGE_KEY_TIMEATTACK, d.ta);
+    storage.set(CONFIG.STORAGE_KEY_MODES, JSON.stringify(d.modes));
+    storage.set(CONFIG.STORAGE_KEY_ACH, JSON.stringify(d.ach));
+    storage.set(CONFIG.STORAGE_KEY_STATS, JSON.stringify(d.stats));
+    storage.set(CONFIG.STORAGE_KEY_STREAK, JSON.stringify(d.streak));
+    storage.set(CONFIG.STORAGE_KEY_SETTINGS, JSON.stringify(d.settings));
+    storage.set(CONFIG.STORAGE_KEY_TIPS, JSON.stringify(d.tips));
+    if (d.tuto) storage.set(CONFIG.STORAGE_KEY_TUTO, '1');
+    else {
+      try { window.localStorage.removeItem(CONFIG.STORAGE_KEY_TUTO); } catch (e) { /* stockage bloqué */ }
+    }
+    return storage.get(CONFIG.STORAGE_KEY_POINTS, '') === String(d.points) &&
+      storage.get(CONFIG.STORAGE_KEY_OWNED, '') === JSON.stringify(d.owned);
+  }
+
+  // --- Écran des réglages : boutons Exporter / Copier / Importer ---
+
+  const saveUi = { pending: null }; // données vérifiées, en attente de confirmation
+
+  function setSaveMsg(el, text, error) {
+    el.textContent = text;
+    el.classList.toggle('error', !!error);
+  }
+
+  function resetSavePanels() {
+    saveUi.pending = null;
+    $('save-export').classList.add('hidden');
+    $('save-import').classList.add('hidden');
+    $('save-confirm').classList.add('hidden');
+    $('save-export-code').value = '';
+    $('save-import-code').value = '';
+    setSaveMsg($('save-export-msg'), '');
+    setSaveMsg($('save-import-msg'), '');
+  }
+
+  function showExport() {
+    resetSavePanels();
+    $('save-export-code').value = makeSaveCode();
+    $('save-export').classList.remove('hidden');
+    Sound.click();
+  }
+
+  function selectExportCode() {
+    const field = $('save-export-code');
+    field.focus();
+    field.select();
+    try { field.setSelectionRange(0, field.value.length); } catch (e) { /* iPhone ancien */ }
+  }
+
+  function copySaveCode() {
+    const code = $('save-export-code').value;
+    const msg = $('save-export-msg');
+    const fallback = function () {
+      // Repli : le code est sélectionné, le joueur peut le copier lui-même
+      selectExportCode();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      setSaveMsg(msg, ok ? 'Code copié ! Garde-le bien (notes, message à toi-même…).' : 'Le code est sélectionné : copie-le avec le menu du téléphone.');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(function () {
+        setSaveMsg(msg, 'Code copié ! Garde-le bien (notes, message à toi-même…).');
+      }, fallback);
+    } else {
+      fallback();
+    }
+    Sound.click();
+  }
+
+  function showImport() {
+    resetSavePanels();
+    $('save-import').classList.remove('hidden');
+    Sound.click();
+  }
+
+  function checkSaveCode() {
+    const result = parseSaveCode($('save-import-code').value);
+    const msg = $('save-import-msg');
+    $('save-confirm').classList.toggle('hidden', !result.data);
+    saveUi.pending = result.data || null;
+    if (result.error) {
+      setSaveMsg(msg, result.error, true);
+      Sound.denied();
+      return;
+    }
+    setSaveMsg(msg, '');
+    $('save-preview').textContent = 'Ce code contient : ' + savePreview(result.data) + '.';
+    Sound.click();
+  }
+
+  function confirmImport() {
+    const data = saveUi.pending;
+    if (!data) return;
+    if (!applySaveData(data)) {
+      setSaveMsg($('save-import-msg'), 'Impossible d\'enregistrer sur cet appareil (navigation privée ?).', true);
+      return;
+    }
+    $('save-confirm').classList.add('hidden');
+    setSaveMsg($('save-import-msg'), 'Progression importée ! Le jeu redémarre…');
+    Sound.achievement();
+    setTimeout(function () { location.reload(); }, 900);
+  }
+
+  function bindSaveCode() {
+    bindButton('btn-save-export', showExport);
+    bindButton('btn-save-copy', copySaveCode);
+    bindButton('btn-save-import', showImport);
+    bindButton('btn-save-check', checkSaveCode);
+    bindButton('btn-save-apply', confirmImport);
+    bindButton('btn-save-cancel', function () {
+      resetSavePanels();
+      Sound.click();
+    });
+    $('save-export-code').addEventListener('focus', selectExportCode);
+    $('save-import-code').addEventListener('input', function () {
+      saveUi.pending = null;
+      $('save-confirm').classList.add('hidden');
+    });
+  }
+
+  /* ====================================================================
      9. DÉROULEMENT D'UNE PARTIE
      Chaque fonction vérifie l'état actuel : un double clic ou une touche
      appuyée deux fois ne peut jamais lancer deux parties en même temps.
@@ -3077,6 +3796,10 @@
     showScreen(null);
     setState('playing');
     if (game.tuto.active) showTutoStep();
+    if (game.mode === 'bossrush' && settings.tips && !tips.seen.boss) {
+      tipOnce('boss');
+      game.rushTimer = Math.max(game.rushTimer, CONFIG.TIP_DURATION); // le temps de la lire
+    }
     Sound.start();
     Music.want(true); // la musique repart du début
   }
@@ -3085,6 +3808,8 @@
     if (game.state !== 'playing') return;
     input.dashQueued = false;
     setState('paused');
+    buildPauseSettings();
+    $('btn-quit').textContent = game.mode === 'trial' ? 'Arrêter l\'essai' : 'Menu principal';
     showScreen('pause');
     Music.want(false);
   }
@@ -3146,6 +3871,7 @@
     game.newRecord = false;
     game.newDailyRecord = false;
     game.newModeRecord = false;
+    if (mode === 'trial') return ''; // essai d'un vaisseau : rien n'est enregistré, même pas les stats
     if (mode === 'zen') {
       commitStats();
       return '';
@@ -3167,6 +3893,10 @@
 
   function goToMenu() {
     if (game.state !== 'paused' && game.state !== 'gameover') return;
+    if (game.mode === 'trial') {
+      endTrial(); // essai arrêté depuis la pause : retour sur la fiche du vaisseau
+      return;
+    }
     if (game.state === 'paused' && !game.tuto.active) {
       // Partie quittée en cours : son score compte quand même (sauf en zen)
       finishRun(Math.floor(game.score));
@@ -3180,35 +3910,40 @@
     resetCombo();
     clearPowerupEffects();
     clearToasts();
+    clearTips();
     refreshMenu();
     showScreen('menu');
     setState('menu');
   }
 
-  // Le joueur est touché : bouclier, mode zen, ou fin de partie
-  function hitPlayer(x, y, hazard) {
+  // Le joueur est touché : bouclier, mode zen, ou fin de partie.
+  // cause : ce qui l'a touché (voir DEATH_CAUSES), affiché sur l'écran de fin
+  function hitPlayer(x, y, hazard, cause) {
     if (game.effects.shield > 0) absorbHit(x, y, hazard);
-    else if (game.mode === 'zen') zenHit(x, y, hazard);
-    else killPlayer();
+    else if (noRecordMode()) zenHit(x, y, hazard); // zen et essai : pas de mort
+    else killPlayer(cause);
   }
 
   // Mode zen : pas de mort, mais le combo et 100 points sont perdus
+  // (l'essai d'un vaisseau fonctionne pareil, sans score à perdre)
   function zenHit(x, y, hazard) {
     const p = game.player;
+    const zen = game.mode === 'zen';
     if (hazard) hazard.dead = true;
     breakCombo();
-    game.score = Math.max(0, game.score - CONFIG.ZEN_HIT_PENALTY);
+    if (zen) game.score = Math.max(0, game.score - CONFIG.ZEN_HIT_PENALTY);
     p.grace = CONFIG.ZEN_GRACE;
     game.flash = Math.max(game.flash, reducedFx() ? 0.15 : 0.35);
     game.shake = Math.max(game.shake, reducedFx() ? 2 : 8);
     burst(x, y, { count: 24, colors: [COLORS.shard, COLORS.white], speed: [80, 300], life: [0.3, 0.7], size: [2, 4], drag: 2.5 });
-    addText(p.x, p.y - 36, '-' + CONFIG.ZEN_HIT_PENALTY, COLORS.shard, 18, 0.9, -40);
+    if (zen) addText(p.x, p.y - 36, '-' + CONFIG.ZEN_HIT_PENALTY, COLORS.shard, 18, 0.9, -40);
     Sound.zenHit();
   }
 
-  function killPlayer() {
+  function killPlayer(cause) {
     const p = game.player;
     p.alive = false;
+    game.deathCause = has(DEATH_CAUSES, cause) ? cause : '';
     clearPowerupEffects(); // les bonus s'arrêtent à la mort
     resetCombo();
     explode(p.x, p.y);
@@ -3219,6 +3954,34 @@
     Sound.explosion();
     Music.want(false);
     setState('dying');
+  }
+
+  // Essayer un vaisseau (bouton sur sa fiche) : verrouillé ou non, 20 s sans risque
+  function startTrial(ship) {
+    if (game.state !== 'menu') return;
+    game.trialShip = ship.id;
+    startGame('trial');
+  }
+
+  // Fin de l'essai (temps écoulé ou arrêté) : rien n'est enregistré, retour sur la fiche
+  function endTrial() {
+    const shipId = game.trialShip;
+    finishRun(0); // ne fait rien en essai, mais toute fin de partie passe par là
+    Music.want(false);
+    clearWorld();
+    game.player = null;
+    game.trialShip = '';
+    game.tuto.active = false;
+    resetCombo();
+    clearPowerupEffects();
+    clearToasts();
+    clearTips();
+    input.dashQueued = false;
+    setState('menu');
+    hangarFocus = shipId || game.shipId;
+    buildHangar();
+    showScreen('hangar');
+    ui.shipInfo.scrollIntoView({ block: 'center' });
   }
 
   // Contre-la-montre : le temps est écoulé
@@ -3245,6 +4008,14 @@
     if (game.diff !== 'normal') tag += (tag ? ' · ' : '') + diffInfo().label;
     ui.goScore.textContent = '0';
     ui.goTitle.textContent = game.endReason === 'time' ? 'TEMPS ÉCOULÉ !' : 'PARTIE TERMINÉE';
+    // Ce qui t'a touché, avec un conseil (pas en fin de contre-la-montre)
+    const cause = game.endReason === 'death' && mode !== 'zen' ? DEATH_CAUSES[game.deathCause] : null;
+    ui.goCause.classList.toggle('hidden', !cause);
+    if (cause) {
+      const who = game.deathCause === 'boss' ? 'le boss ' + game.boss.name : cause.what;
+      ui.goCauseWhat.textContent = 'Touché par : ' + who;
+      ui.goCauseTip.textContent = cause.tip;
+    }
     ui.goMode.classList.toggle('hidden', !tag);
     ui.goMode.textContent = tag;
     ui.goBestLabel.textContent = MODE_INFO[mode].record;
@@ -3270,6 +4041,7 @@
     ui.goStreak.classList.toggle('hidden', !game.sessionStreak);
     ui.goUnlock.textContent = unlocked.length ? 'Nouveau vaisseau : ' + unlocked.join(', ') : '';
     ui.goUnlock.classList.toggle('hidden', unlocked.length === 0);
+    limitBadges();
     const next = nextShip();
     ui.goProgress.textContent = next
       ? 'Prochain vaisseau : ' + next.name + ' à ' + formatScore(next.cost) + ' points cumulés' +
@@ -3285,6 +4057,31 @@
     if (unlocked.length) Sound.newShip();
   }
 
+  // Écran de fin : 2 badges visibles au plus (dans l'ordre : record, vaisseau,
+  // succès, missions, série). Les autres attendent derrière "Et N autres".
+  const MAX_BADGES = 2;
+
+  function limitBadges() {
+    const list = [ui.goRecord, ui.goUnlock, ui.goAch, ui.goMissions, ui.goStreak];
+    let shown = 0;
+    for (const el of list) {
+      const extra = !el.classList.contains('hidden') && ++shown > MAX_BADGES;
+      el.classList.toggle('extra', extra);
+    }
+    const more = shown - MAX_BADGES;
+    ui.goMore.parentNode.classList.remove('open');
+    ui.goMore.classList.toggle('hidden', more <= 0);
+    ui.goMore.setAttribute('aria-expanded', 'false');
+    ui.goMore.textContent = more > 1 ? 'Et ' + more + ' autres' : 'Et 1 autre';
+  }
+
+  function showAllBadges() {
+    ui.goMore.parentNode.classList.add('open');
+    ui.goMore.classList.add('hidden');
+    ui.goMore.setAttribute('aria-expanded', 'true');
+    Sound.click();
+  }
+
   /* --------------------------------------------------------------------
      TUTORIEL (premier lancement) : 3 étapes qui avancent quand le joueur
      fait l'action. Pendant le tutoriel, le temps de jeu est arrêté :
@@ -3295,7 +4092,7 @@
     const touch = input.touchMode;
     const texts = [
       touch ? 'Pose le pouce n\'importe où et pousse pour te déplacer' : 'Déplace-toi avec les flèches, ZQSD ou la souris',
-      touch ? 'Tape l\'écran (ou avec un 2ᵉ doigt) pour faire un dash, invincible' : 'Appuie sur Espace pour faire un dash (invincible)',
+      touch ? (DASH_MODES[settings.dash] || DASH_MODES.tap).tuto : 'Appuie sur Espace pour faire un dash (invincible)',
       'Attrape l\'énergie jaune : +100 points et dash rechargé',
     ];
     ui.tutoStep.textContent = 'Tutoriel · étape ' + (game.tuto.step + 1) + '/3';
@@ -3492,7 +4289,7 @@
     if (p.dashCooldown <= 0) p.dashCooldown = dashCooldownTime();
     p.angle = Math.atan2(p.dashDirY, p.dashDirX);
     game.stats.dashes++;
-    if (game.mode !== 'zen') ach.dashes++; // pour le succès "Vitesse lumière"
+    if (!noRecordMode()) ach.dashes++; // pour le succès "Vitesse lumière"
     addRing(p.x, p.y, 8, 55, 0.3, shipColor(), 3);
     Sound.dash();
   }
@@ -3598,6 +4395,7 @@
       type: type, x: x, y: y, r: r, angle: angle, speed: baseSpeed * speedMult,
       rot: rot, spin: spin, points: points, splitSeed: splitSeed,
     }));
+    if (type !== 'shard') tipOnce(type); // traqueur, gros éclat, rebondisseur
   }
 
   function spawnWave() {
@@ -3783,6 +4581,7 @@
       addLaser(!horizontal, (horizontal ? p.x : p.y) + shift2);
     }
     Sound.laserWarn();
+    tipOnce('laser');
   }
 
   function addLaser(horizontal, pos) {
@@ -3830,6 +4629,7 @@
       const y = view.H * spots[i + 1];
       if (!p || Math.hypot(x - p.x, y - p.y) >= CONFIG.MINE_SAFE_DISTANCE) {
         game.mines.push({ x: x, y: y, t: 0, exploded: false, ring: 0, beep: 0 });
+        tipOnce('mine');
         return;
       }
     }
@@ -3872,6 +4672,7 @@
       if (!p || Math.hypot(x - p.x, y - p.y) >= CONFIG.HOLE_SAFE_DISTANCE) {
         game.holes.push({ x: x, y: y, t: 0, rot: 0, caught: false });
         Sound.holeOpen();
+        tipOnce('hole');
         return;
       }
     }
@@ -3952,6 +4753,7 @@
       dead: false,
     });
     Sound.wallWarn();
+    tipOnce('wall');
   }
 
   function updateWalls(dt) {
@@ -3980,6 +4782,7 @@
         const angle = p ? Math.atan2(p.y - y, p.x - x) : 0;
         game.turrets.push({ x: x, y: y, t: 0, fire: CONFIG.TURRET_WARMUP, angle: angle, dead: false });
         addRing(x, y, 6, 60, 0.5, COLORS.turret, 2);
+        tipOnce('turret');
         return;
       }
     }
@@ -4380,6 +5183,7 @@
     addText(pu.x, pu.y - 28, info.name.toUpperCase() + ' !', info.color, 22, 1.1, -40);
     Sound.powerUp();
     if (pu.type === 'slow') Sound.slowStart();
+    tipOnce(pu.type);
   }
 
   // Bombe : une onde de choc détruit tous les dangers à l'écran (sauf lasers, trous noirs et boss)
@@ -4468,6 +5272,7 @@
       addText(p.x, p.y - 72, 'COMBO x' + mult + ' !', COLORS.combo, 18 + mult * 3, 1.1, -30, 'combo');
       addRing(p.x, p.y, p.r + 6, 70 + mult * 10, 0.45, COLORS.combo, 3);
       Sound.comboUp(mult);
+      tipOnce('combo');
     }
   }
 
@@ -4561,7 +5366,7 @@
         continue;
       }
       if (!invincible && d2 < hitDist * hitDist) {
-        hitPlayer(h.x, h.y, h);
+        hitPlayer(h.x, h.y, h, h.type === 'splitter' ? 'shard' : h.type);
         return;
       }
       const grazeDist = hitDist + CONFIG.NEAR_MISS_MARGIN;
@@ -4577,6 +5382,7 @@
         game.stats.grazes++;
         addText(p.x, p.y - 30, 'Frôlé ! +' + points, shipColor(), 15, 0.8, -40);
         Sound.graze();
+        tipOnce('graze');
       }
     }
 
@@ -4587,7 +5393,7 @@
       if (!laserIsActive(l)) continue;
       const d = l.horizontal ? Math.abs(p.y - l.pos) : Math.abs(p.x - l.pos);
       if (d < CONFIG.LASER_WIDTH / 2 + pr * 0.6) {
-        hitPlayer(p.x, p.y, null);
+        hitPlayer(p.x, p.y, null, 'laser');
         return;
       }
     }
@@ -4598,11 +5404,11 @@
       if (!m.exploded) {
         if (d < CONFIG.MINE_RADIUS + pr) {
           m.t = CONFIG.MINE_ARM_TIME; // la mine touchée explose tout de suite
-          hitPlayer(m.x, m.y, null);
+          hitPlayer(m.x, m.y, null, 'mine');
           return;
         }
       } else if (Math.abs(d - m.ring) < CONFIG.MINE_RING_WIDTH / 2 + pr * 0.7) {
-        hitPlayer(p.x, p.y, null);
+        hitPlayer(p.x, p.y, null, 'mine-ring');
         return;
       }
     }
@@ -4610,7 +5416,7 @@
     // Centre des trous noirs
     for (const hole of game.holes) {
       if (holeStrength(hole) > 0.3 && Math.hypot(p.x - hole.x, p.y - hole.y) < CONFIG.HOLE_CORE + pr) {
-        hitPlayer(hole.x, hole.y, null);
+        hitPlayer(hole.x, hole.y, null, 'hole');
         return;
       }
     }
@@ -4622,7 +5428,7 @@
       const along = w.vertical ? p.y : p.x;
       if (Math.abs(across - w.pos) < CONFIG.WALL_THICKNESS / 2 + pr &&
           Math.abs(along - w.gap) > CONFIG.WALL_GAP / 2 - pr) {
-        hitPlayer(p.x, p.y, null);
+        hitPlayer(p.x, p.y, null, 'wall');
         return;
       }
     }
@@ -4630,7 +5436,7 @@
     // Tourelles : leur corps est dangereux
     for (const tu of game.turrets) {
       if (tu.t > 0.3 && Math.hypot(p.x - tu.x, p.y - tu.y) < CONFIG.TURRET_RADIUS + pr) {
-        hitPlayer(tu.x, tu.y, null);
+        hitPlayer(tu.x, tu.y, null, 'turret');
         return;
       }
     }
@@ -4638,7 +5444,7 @@
     // Boss : son corps et ses rayons tournants
     const b = game.boss;
     if (b.active && b.phase !== 'leave' && Math.hypot(p.x - b.x, p.y - b.y) < b.r * 0.8 + pr) {
-      hitPlayer(p.x, p.y, null);
+      hitPlayer(p.x, p.y, null, 'boss');
       return;
     }
     for (const bm of game.beams) {
@@ -4648,7 +5454,7 @@
       const along = dx * Math.cos(bm.angle) + dy * Math.sin(bm.angle);
       const perp = Math.abs(-dx * Math.sin(bm.angle) + dy * Math.cos(bm.angle));
       if (along > 0 && perp < CONFIG.BOSS_BEAM_WIDTH / 2 + pr * 0.6) {
-        hitPlayer(p.x, p.y, null);
+        hitPlayer(p.x, p.y, null, 'beam');
         return;
       }
     }
@@ -4690,6 +5496,7 @@
       announce('Les tourelles ouvrent le feu !', COLORS.turret);
       game.turretTimer = 2;
     }
+    if ((game.level + 1) % CONFIG.BOSS_EVERY === 0) tipOnce('boss'); // boss au prochain niveau
     if (game.level % CONFIG.BOSS_EVERY === 0 && !game.boss.active) {
       const next = bossInfo(game.boss.number + 1);
       announce('ALERTE : ' + next.name.toUpperCase() + ' arrive ! Survis ' + next.duration + ' s', next.def.color);
@@ -4732,7 +5539,13 @@
       endTimeAttack();
       return;
     }
-    if (game.mode === 'bossrush') {
+    // Essai d'un vaisseau : 20 s, au niveau 3, puis retour sur sa fiche
+    if (game.mode === 'trial') {
+      if (game.time >= CONFIG.TRIAL_DURATION) {
+        endTrial();
+        return;
+      }
+    } else if (game.mode === 'bossrush') {
       // Boss Rush : un boss après l'autre, avec un petit répit entre deux
       if (!game.boss.active) {
         game.rushTimer -= dt;
@@ -4888,7 +5701,10 @@
       game.flash = Math.max(0, game.flash - dt * CONFIG.FLASH_DECAY);
     }
 
-    if (game.state === 'playing') updateToasts(dt);
+    if (game.state === 'playing') {
+      updateToasts(dt);
+      updateTips(dt);
+    }
 
     switch (game.state) {
       case 'menu': updateMenu(dt); break;
@@ -5185,9 +6001,11 @@
         // Alerte : la zone dangereuse est montrée à l'avance
         const progress = l.t / CONFIG.LASER_WARNING;
         const blink = 0.5 + 0.5 * Math.sin(l.t * (10 + 22 * progress));
-        ctx.fillStyle = 'rgba(255, 45, 111, ' + (0.06 + 0.14 * progress).toFixed(3) + ')';
+        ctx.globalAlpha = 0.06 + 0.14 * progress;
+        ctx.fillStyle = COLORS.laser;
         ctx.fillRect(0, -w / 2, len, w);
-        ctx.strokeStyle = 'rgba(255, 45, 111, 0.4)';
+        ctx.globalAlpha = 0.4;
+        ctx.strokeStyle = COLORS.laser;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(0, -w / 2);
@@ -5197,7 +6015,7 @@
         ctx.stroke();
         ctx.setLineDash([14, 10]);
         ctx.lineDashOffset = -l.t * 60;
-        ctx.strokeStyle = 'rgba(255, 45, 111, ' + (0.35 + 0.5 * blink).toFixed(3) + ')';
+        ctx.globalAlpha = 0.35 + 0.5 * blink;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(0, 0);
@@ -5336,14 +6154,19 @@
     ctx.lineTo(-k * 0.55, k);
     ctx.quadraticCurveTo(-k, k, -k, k * 0.55);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(255, 122, 92, 0.16)';
+    ctx.fillStyle = COLORS.bouncerFill;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 122, 92, 0.3)';
+    ctx.strokeStyle = COLORS.bouncerHalo;
     ctx.lineWidth = 7;
     ctx.stroke();
     ctx.strokeStyle = COLORS.bouncer;
     ctx.lineWidth = 2.4;
     ctx.stroke();
+    if (settings.colorblind) {
+      // Mode daltonien : double bord carré, bien différent d'un éclat
+      ctx.lineWidth = 1.6;
+      ctx.strokeRect(-k * 0.55, -k * 0.55, k * 1.1, k * 1.1);
+    }
     ctx.rotate(-h.rot);
     ctx.fillStyle = COLORS.bouncer;
     for (let i = 0; i < h.bounces; i++) {
@@ -5363,6 +6186,13 @@
     ctx.beginPath();
     ctx.arc(h.x, h.y, h.r, 0, TAU);
     ctx.fill();
+    if (settings.colorblind) {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = COLORS.background;
+      ctx.beginPath();
+      ctx.arc(h.x, h.y, h.r * 0.4, 0, TAU);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -5400,11 +6230,13 @@
       }
       ctx.shadowColor = COLORS.wall;
       ctx.shadowBlur = glow(20);
-      ctx.fillStyle = 'rgba(255, 61, 110, 0.85)';
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = COLORS.wall;
       ctx.fillRect(w.pos - th / 2, -10, th, w.gap - half + 10);
       ctx.fillRect(w.pos - th / 2, w.gap + half, th, length - (w.gap + half) + 10);
       ctx.shadowBlur = 0;
-      ctx.fillStyle = '#ffd6e2';
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = COLORS.wallCore;
       ctx.fillRect(w.pos - th * 0.15, -10, th * 0.3, w.gap - half + 10);
       ctx.fillRect(w.pos - th * 0.15, w.gap + half, th * 0.3, length - (w.gap + half) + 10);
       // Bords du passage bien visibles
@@ -5759,7 +6591,12 @@
     ctx.stroke();
     ctx.strokeStyle = COLORS.seeker;
     ctx.lineWidth = 2.2;
+    if (settings.colorblind) {
+      ctx.setLineDash(DASH_SEEKER);
+      ctx.lineWidth = 3;
+    }
     ctx.stroke();
+    ctx.setLineDash(NO_DASH);
     ctx.fillStyle = COLORS.seeker;
     ctx.beginPath();
     ctx.arc(0, 0, h.r * 0.38, 0, TAU);
@@ -5984,12 +6821,13 @@
     ctx.strokeStyle = 'rgba(5, 1, 15, 0.9)';
     for (const t of game.texts) {
       ctx.globalAlpha = Math.min(1, (t.life / t.maxLife) * 2.5);
-      ctx.font = t.size + 'px ' + FONT;
+      // Taille du texte choisie dans les réglages (+20 % au maximum)
+      let size = Math.round(t.size * canvasTextScale);
+      ctx.font = size + 'px ' + FONT;
       // Texte trop long pour l'écran : on le réduit
-      let size = t.size;
       const width = ctx.measureText(t.text).width;
       if (width > view.W - 28) {
-        size = Math.floor(t.size * (view.W - 28) / width);
+        size = Math.floor(size * (view.W - 28) / width);
         ctx.font = size + 'px ' + FONT;
       }
       // Contour sombre net (lisible sur tout le décor), puis la couleur
@@ -6013,7 +6851,7 @@
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r + 10 + 80 * k, 0, TAU);
     ctx.stroke();
-    ctx.font = '40px ' + FONT;
+    ctx.font = Math.round(40 * canvasTextScale) + 'px ' + FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
@@ -6088,15 +6926,21 @@
     bindButton('btn-mode-extreme', function () { startGame('extreme'); });
     bindButton('btn-mode-chaos', function () { startGame('chaos'); });
     bindButton('btn-share', shareScore);
+    bindButton('btn-go-more', showAllBadges);
     bindButton('btn-tuto-skip', finishTutorial);
     bindSettings();
     bindLeaderboard();
+    bindInstall();
+    bindSaveCode();
     applyReduceFx();
+    applyPalette();
+    applyTextScale();
     bindButton('btn-resume', resumeGame);
     bindButton('btn-quit', function () { Sound.click(); goToMenu(); });
     bindButton('btn-replay', function () { startGame(game.mode); });
     bindButton('btn-menu', function () { Sound.click(); goToMenu(); });
     bindButton('btn-pause', pauseGame);
+    bindButton('btn-reload', function () { location.reload(); });
     bindButton('btn-sound', toggleMute);
 
     // Clavier
@@ -6158,6 +7002,147 @@
     requestAnimationFrame(frame);
   }
 
+  // --- Installer le jeu sur l'écran d'accueil ---
+  // iPhone / iPad (Safari) : carte avec un schéma "Partager, puis Sur l'écran d'accueil".
+  // Android / Chrome : bouton "Installer" (événement beforeinstallprompt).
+  // La carte n'apparaît qu'une fois, et jamais quand le jeu est déjà installé.
+  const install = { prompt: null };
+
+  function isInstalled() {
+    if (navigator.standalone === true) return true;
+    const mm = window.matchMedia;
+    return !!(mm && (mm('(display-mode: standalone)').matches || mm('(display-mode: fullscreen)').matches));
+  }
+
+  function isIosSafari() {
+    const ua = navigator.userAgent || '';
+    const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    return ios && /Safari\//.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA\/|FBAN|FBAV|Instagram|Line\//.test(ua);
+  }
+
+  // 'ios', 'prompt' (bouton Installer) ou '' (rien à proposer)
+  function installKind() {
+    if (isInstalled()) return '';
+    if (install.prompt) return 'prompt';
+    if (isIosSafari()) return 'ios';
+    return '';
+  }
+
+  function refreshInstallCard() {
+    const kind = installKind();
+    const seen = storage.get(CONFIG.STORAGE_KEY_INSTALL, '') === '1';
+    $('install-card').classList.toggle('hidden', !kind || seen);
+    $('install-ios').classList.toggle('hidden', kind !== 'ios');
+    $('install-android').classList.toggle('hidden', kind !== 'prompt');
+    $('btn-install').classList.toggle('hidden', kind !== 'prompt');
+    $('btn-install-ok').textContent = kind === 'prompt' ? 'Plus tard' : 'Compris';
+  }
+
+  function closeInstallCard() {
+    storage.set(CONFIG.STORAGE_KEY_INSTALL, '1');
+    refreshInstallCard();
+    Sound.click();
+  }
+
+  function askInstall() {
+    const prompt = install.prompt;
+    if (!prompt) return;
+    install.prompt = null; // le navigateur ne permet de le demander qu'une fois
+    try {
+      prompt.prompt();
+      if (prompt.userChoice) {
+        prompt.userChoice.then(function (choice) {
+          if (choice && choice.outcome === 'accepted') storage.set(CONFIG.STORAGE_KEY_INSTALL, '1');
+          refreshInstallCard();
+          refreshInstallSetting();
+        }, function () {});
+      }
+    } catch (e) { /* refusé par le navigateur */ }
+    refreshInstallCard();
+    refreshInstallSetting();
+  }
+
+  // Ligne "Installer le jeu" des réglages
+  function refreshInstallSetting() {
+    const kind = installKind();
+    $('install-setting').classList.toggle('hidden', isInstalled());
+    $('btn-install-again').classList.toggle('hidden', !kind);
+    $('btn-install-again').textContent = kind === 'prompt' ? 'Installer' : 'Voir';
+    $('install-setting-text').textContent = kind
+      ? 'Plein écran, et il marche sans internet'
+      : 'Dans le menu de ton navigateur : « Installer » ou « Ajouter à l\'écran d\'accueil »';
+  }
+
+  function bindInstall() {
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault(); // on affiche notre propre bouton "Installer"
+      install.prompt = e;
+      refreshInstallCard();
+      refreshInstallSetting();
+    });
+    window.addEventListener('appinstalled', function () {
+      install.prompt = null;
+      storage.set(CONFIG.STORAGE_KEY_INSTALL, '1');
+      refreshInstallCard();
+      refreshInstallSetting();
+    });
+    bindButton('btn-install', askInstall);
+    bindButton('btn-install-ok', closeInstallCard);
+    bindButton('btn-install-again', function () {
+      if (installKind() === 'prompt') {
+        askInstall();
+        return;
+      }
+      // Revoir la carte : retour au menu, carte affichée
+      try { window.localStorage.removeItem(CONFIG.STORAGE_KEY_INSTALL); } catch (e) { /* stockage bloqué */ }
+      backToMenu();
+      $('install-card').scrollIntoView({ block: 'center' });
+    });
+  }
+
+  // --- Mise à jour du jeu ---
+  // Quand une nouvelle version a été téléchargée, un bandeau "Nouvelle version prête"
+  // apparaît dans le menu. Le jeu ne se recharge JAMAIS tout seul (surtout pas en pleine partie).
+  const appUpdate = { ready: false };
+
+  function markUpdateReady() {
+    if (appUpdate.ready) return;
+    appUpdate.ready = true;
+    refreshUpdateBar();
+  }
+
+  function refreshUpdateBar() {
+    ui.updateBar.classList.toggle('hidden', !appUpdate.ready || game.state !== 'menu');
+  }
+
+  // Surveille l'arrivée d'une nouvelle version : au démarrage et à chaque retour sur le jeu
+  function watchForUpdates(reg) {
+    // Un nouveau "service worker" s'installe. S'il y en avait déjà un, c'est une mise à jour
+    // (sinon c'est le tout premier lancement : rien à annoncer).
+    reg.addEventListener('updatefound', function () {
+      const worker = reg.installing;
+      const wasInstalled = !!navigator.serviceWorker.controller;
+      if (!worker || !wasInstalled) return;
+      worker.addEventListener('statechange', function () {
+        if (worker.state === 'activated') markUpdateReady();
+      });
+    });
+    // La nouvelle version prend la main (sw.js appelle skipWaiting et clients.claim)
+    let controller = navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (controller) markUpdateReady();
+      controller = navigator.serviceWorker.controller;
+    });
+    const check = function () {
+      const promise = reg.update();
+      if (promise && promise.catch) promise.catch(function () { /* pas d'internet : on réessaiera */ });
+    };
+    check();
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) check();
+    });
+  }
+
   // Mode hors ligne : seulement quand le jeu est ouvert depuis un site (https://).
   // Il s'installe alors sur l'appareil et marche ensuite sans internet.
   // En double-cliquant sur index.html (file://), rien n'est activé : pas d'erreur.
@@ -6173,7 +7158,7 @@
 
     if (!('serviceWorker' in navigator)) return;
     const register = function () {
-      navigator.serviceWorker.register('sw.js').catch(function () {
+      navigator.serviceWorker.register('sw.js').then(watchForUpdates).catch(function () {
         /* mode hors ligne indisponible : le jeu marche quand même en ligne */
       });
     };
