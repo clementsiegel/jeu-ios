@@ -182,7 +182,7 @@
     </section>
 
     <!-- ===== Écran de fin de partie ===== -->
-    <section id="screen-gameover" class="screen screen-center" aria-labelledby="go-title">
+    <section id="screen-gameover" class="screen screen-center screen-go" aria-labelledby="go-title">
       <div class="panel panel-small">
         <p id="go-mode" class="mode-tag hidden">Défi du jour</p>
         <h2 id="go-title" class="screen-title gameover-title">Partie terminée</h2>
@@ -198,6 +198,8 @@
           <p id="go-ach" class="badge ach-badge hidden"></p>
           <p id="go-missions" class="badge mission-badge hidden"></p>
           <p id="go-streak" class="badge streak-badge hidden"></p>
+          <!-- Plus de 2 badges : les autres sont cachés derrière ce bouton -->
+          <button type="button" id="btn-go-more" class="link-btn badge-more hidden" aria-expanded="false">Et 3 autres</button>
         </div>
 
         <!-- Classement en ligne : place obtenue, ou choix du pseudo (rempli par game.js) -->
@@ -216,7 +218,7 @@
           </form>
         </div>
 
-        <div class="stats">
+        <div class="stats stats-compact">
           <div class="stat"><span id="go-best">0</span><small id="go-best-label">Record</small></div>
           <div class="stat"><span id="go-time">0:00</span><small>Temps</small></div>
           <div class="stat"><span id="go-level">1</span><small>Niveau</small></div>
@@ -228,12 +230,15 @@
         </div>
         <p id="go-progress" class="progress-line"></p>
 
-        <div class="btn-row">
-          <button type="button" id="btn-replay" class="btn btn-primary">Rejouer</button>
-          <button type="button" id="btn-share" class="btn">Partager</button>
-          <button type="button" id="btn-menu" class="btn">Menu</button>
+        <!-- Barre collée en bas de l'écran : "Rejouer" toujours visible sans défiler -->
+        <div class="go-actions">
+          <div class="btn-row">
+            <button type="button" id="btn-replay" class="btn btn-primary">Rejouer</button>
+            <button type="button" id="btn-share" class="btn">Partager</button>
+            <button type="button" id="btn-menu" class="btn">Menu</button>
+          </div>
+          <p class="hint hide-touch">Entrée pour rejouer.</p>
         </div>
-        <p class="hint hide-touch">Entrée pour rejouer.</p>
       </div>
     </section>
 

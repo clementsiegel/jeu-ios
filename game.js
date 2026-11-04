@@ -1816,6 +1816,7 @@
     statsGrid: $('stats-grid'),
     setDifficulty: $('set-difficulty'),
     goStreak: $('go-streak'),
+    goMore: $('btn-go-more'),
     goProgress: $('go-progress'),
     btnReplay: $('btn-replay'),
     powerups: $('powerups'),
@@ -3270,6 +3271,7 @@
     ui.goStreak.classList.toggle('hidden', !game.sessionStreak);
     ui.goUnlock.textContent = unlocked.length ? 'Nouveau vaisseau : ' + unlocked.join(', ') : '';
     ui.goUnlock.classList.toggle('hidden', unlocked.length === 0);
+    limitBadges();
     const next = nextShip();
     ui.goProgress.textContent = next
       ? 'Prochain vaisseau : ' + next.name + ' à ' + formatScore(next.cost) + ' points cumulés' +
@@ -3283,6 +3285,31 @@
     if (game.newRecord || game.newDailyRecord || game.newModeRecord) Sound.record();
     else Sound.gameOver();
     if (unlocked.length) Sound.newShip();
+  }
+
+  // Écran de fin : 2 badges visibles au plus (dans l'ordre : record, vaisseau,
+  // succès, missions, série). Les autres attendent derrière "Et N autres".
+  const MAX_BADGES = 2;
+
+  function limitBadges() {
+    const list = [ui.goRecord, ui.goUnlock, ui.goAch, ui.goMissions, ui.goStreak];
+    let shown = 0;
+    for (const el of list) {
+      const extra = !el.classList.contains('hidden') && ++shown > MAX_BADGES;
+      el.classList.toggle('extra', extra);
+    }
+    const more = shown - MAX_BADGES;
+    ui.goMore.parentNode.classList.remove('open');
+    ui.goMore.classList.toggle('hidden', more <= 0);
+    ui.goMore.setAttribute('aria-expanded', 'false');
+    ui.goMore.textContent = more > 1 ? 'Et ' + more + ' autres' : 'Et 1 autre';
+  }
+
+  function showAllBadges() {
+    ui.goMore.parentNode.classList.add('open');
+    ui.goMore.classList.add('hidden');
+    ui.goMore.setAttribute('aria-expanded', 'true');
+    Sound.click();
   }
 
   /* --------------------------------------------------------------------
@@ -6088,6 +6115,7 @@
     bindButton('btn-mode-extreme', function () { startGame('extreme'); });
     bindButton('btn-mode-chaos', function () { startGame('chaos'); });
     bindButton('btn-share', shareScore);
+    bindButton('btn-go-more', showAllBadges);
     bindButton('btn-tuto-skip', finishTutorial);
     bindSettings();
     bindLeaderboard();
