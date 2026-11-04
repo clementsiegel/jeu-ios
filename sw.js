@@ -12,7 +12,7 @@
    affiche alors "Nouvelle version prête" avec un bouton "Recharger".
    ====================================================================== */
 
-const VERSION = 'eclats-neon-2.2.1'; // même numéro que GAME_VERSION dans game.js
+const VERSION = 'eclats-neon-2.3'; // même numéro que GAME_VERSION dans game.js
 
 // Tous les fichiers nécessaires pour jouer
 const FILES = [

@@ -1,11 +1,16 @@
 -- =====================================================================
 -- ÉCLATS NÉON — classement en ligne (Supabase)
 --
--- À faire une seule fois :
+-- À faire une seule fois, puis à REFAIRE quand le jeu ajoute un mode au
+-- classement (c'est le cas avec Boss Rush et Chaos) :
 --   1. Dans Supabase, ouvre ton projet, puis "SQL Editor" (menu de gauche).
 --   2. Colle tout ce fichier, puis clique sur "Run".
 --   3. Ça doit afficher "Success. No rows returned".
--- On peut le relancer sans risque : rien n'est effacé.
+-- On peut le relancer sans risque : rien n'est effacé, les scores déjà
+-- enregistrés sont gardés.
+--
+-- Modes du classement : normal, daily (défi du jour), timeattack (60 s),
+-- bossrush (Boss Rush) et chaos (Chaos).
 --
 -- Pour modérer (pseudo méchant, score truqué) : "Table Editor", table
 -- "joueurs". Supprimer une ligne efface le joueur et tous ses scores.
@@ -30,12 +35,18 @@ create unique index if not exists joueurs_pseudo_unique on public.joueurs (lower
 -- (et pour chaque jour dans le défi du jour)
 create table if not exists public.scores (
   joueur uuid not null references public.joueurs (id) on delete cascade,
-  mode text not null check (mode in ('normal', 'daily', 'timeattack')),
+  mode text not null,
   jour text not null default '', -- date du défi du jour (AAAA-MM-JJ), vide pour les autres modes
   score integer not null check (score > 0 and score <= 10000000),
   le timestamptz not null default now(),
   primary key (joueur, mode, jour)
 );
+
+-- Liste des modes acceptés. Refaite à chaque exécution : une base créée avec
+-- l'ancienne liste (3 modes) accepte alors aussi Boss Rush et Chaos.
+alter table public.scores drop constraint if exists scores_mode_check;
+alter table public.scores add constraint scores_mode_check
+  check (mode in ('normal', 'daily', 'timeattack', 'bossrush', 'chaos'));
 
 create index if not exists scores_classement on public.scores (mode, jour, score desc, le);
 
@@ -116,7 +127,7 @@ begin
   if p_joueur is null then
     raise exception 'joueur_invalide';
   end if;
-  if p_mode is null or p_mode not in ('normal', 'daily', 'timeattack') then
+  if p_mode is null or p_mode not in ('normal', 'daily', 'timeattack', 'bossrush', 'chaos') then
     raise exception 'mode_invalide';
   end if;
   if p_score is null or p_score <= 0 or p_score > 10000000 then

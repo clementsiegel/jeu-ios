@@ -29,7 +29,7 @@
   // Version du jeu, affichée dans les Réglages. À augmenter à chaque mise à jour :
   // grosse mise à jour 1.8 -> 1.9, petite correction 1.8 -> 1.81 -> 1.82.
   // Penser à mettre la même dans VERSION, en haut de sw.js (mode hors ligne).
-  const GAME_VERSION = '2.2.1';
+  const GAME_VERSION = '2.3';
 
   // --- Classement en ligne (Supabase) ---
   // Les 2 codes se trouvent dans Supabase, bouton "Connect" du projet
@@ -281,6 +281,7 @@
     STORAGE_KEY_PLAYER: 'eclatsNeon.joueur',   // identifiant secret pour le classement en ligne
     STORAGE_KEY_PSEUDO: 'eclatsNeon.pseudo',
     STORAGE_KEY_PENDING: 'eclatsNeon.classementEnAttente', // scores pas encore envoyés
+    STORAGE_KEY_SYNCED: 'eclatsNeon.classementEnvoye',     // meilleur score déjà envoyé, par classement
     STORAGE_KEY_OWNED: 'eclatsNeon.vaisseauxDebloques',
     STORAGE_KEY_MODES: 'eclatsNeon.recordsModes',  // records Boss Rush, Extrême, Chaos
     STORAGE_KEY_MISSIONS: 'eclatsNeon.missions',
@@ -2842,7 +2843,7 @@
      changer son pseudo ou ses scores.
      ==================================================================== */
 
-  const LB_MODES = ['normal', 'daily', 'timeattack'];
+  const LB_MODES = ['normal', 'daily', 'timeattack', 'bossrush', 'chaos'];
   const LB_SIZE = 20; // nombre de joueurs affichés
   const PSEUDO_CHARS = /^[A-Za-z0-9À-ÖØ-öø-ÿ _.\-]+$/;
   // Mots refusés dans les pseudos (vérification simple, faite sur l'appareil)
@@ -2988,12 +2989,44 @@
     return Array.isArray(data) ? {} : data;
   }
 
-  function queueOnlineScore(mode, score) {
+  // day : seulement pour le défi du jour (par défaut, le jour de la partie en cours)
+  function queueOnlineScore(mode, score, day) {
     if (!online.enabled || LB_MODES.indexOf(mode) < 0 || !(score > 0)) return;
     const pending = loadPending();
-    const key = boardKey(mode, game.dailyKey);
+    const key = boardKey(mode, day || game.dailyKey || todayKey());
     pending[key] = Math.max(pending[key] || 0, Math.floor(score));
     storage.set(CONFIG.STORAGE_KEY_PENDING, JSON.stringify(pending));
+  }
+
+  // Retient qu'un score est bien arrivé au classement (pour ne pas le renvoyer à chaque lancement)
+  function markSynced(key, score) {
+    const done = loadJSON(CONFIG.STORAGE_KEY_SYNCED, {});
+    const todayDaily = boardKey('daily', todayKey());
+    for (const k of Object.keys(done)) {
+      if (k.indexOf('daily|') === 0 && k !== todayDaily) delete done[k]; // vieux défis : inutile de les garder
+    }
+    if (!(score <= (done[key] || 0))) done[key] = score;
+    storage.set(CONFIG.STORAGE_KEY_SYNCED, JSON.stringify(done));
+  }
+
+  // Records déjà présents sur l'appareil (jouer avant l'arrivée du classement) : ils sont
+  // envoyés tout seuls, une seule fois, sans refaire de partie. Ils partent dès que le
+  // joueur a choisi un pseudo. Le record "Normal" est le meilleur score des parties
+  // Normal et Défi du jour (c'est le même record dans le jeu).
+  function syncExistingRecords() {
+    if (!online.enabled) return;
+    const done = loadJSON(CONFIG.STORAGE_KEY_SYNCED, {});
+    const today = todayKey();
+    const records = [
+      ['normal', game.best, ''],
+      ['timeattack', game.bestTA, ''],
+      ['bossrush', game.modeRecords.bossrush || 0, ''],
+      ['chaos', game.modeRecords.chaos || 0, ''],
+      ['daily', loadDailyBest(today), today], // seulement le défi d'aujourd'hui (le serveur refuse les autres)
+    ];
+    for (const r of records) {
+      if (r[1] > 0 && !(r[1] <= (done[boardKey(r[0], r[2])] || 0))) queueOnlineScore(r[0], r[1], r[2]);
+    }
   }
 
   // Retire un score envoyé (sauf si un meilleur est arrivé entre-temps)
@@ -3030,6 +3063,7 @@
         }).then(function (res) {
           out.results[key] = res;
           dropPending(key, score);
+          markSynced(key, score);
         }, function (err) {
           out.error = err;
           if (err.message === 'pseudo_pris') {
@@ -3103,6 +3137,8 @@
       normal: 'Le meilleur score de chaque joueur',
       daily: 'Défi du ' + formatToday() + ' : les mêmes vagues pour tout le monde',
       timeattack: 'Contre-la-montre : 60 secondes',
+      bossrush: 'Boss Rush : les boss à la suite',
+      chaos: 'Chaos : tout va plus vite',
     };
     ui.lbSub.textContent = subs[online.tab];
     showLbPseudo(false);
@@ -3209,7 +3245,9 @@
       showLbPseudo(false);
       loadLeaderboard();
     });
-    // Scores joués sans internet : on les envoie dès l'ouverture du jeu
+    // Records déjà présents sur l'appareil + scores joués sans internet :
+    // on les envoie dès l'ouverture du jeu (ou dès que le pseudo est choisi)
+    syncExistingRecords();
     if (online.enabled) flushOnlineScores();
   }
 
