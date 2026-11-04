@@ -241,6 +241,8 @@
     CHAOS_SPEED: 1.3,
     CHAOS_SPAWN: 0.65,
     CHAOS_LEVEL_DURATION: 10,
+    TRIAL_DURATION: 20,        // essai d'un vaisseau : 20 secondes
+    TRIAL_LEVEL: 3,            // avec les dangers du niveau 3
 
     // --- Missions du jour et série ---
     STREAK_BONUS: 5000,        // points tous les 7 jours de suite au défi du jour
@@ -390,6 +392,7 @@
     bossrush:   { name: 'Boss Rush',        record: 'Record Boss Rush' },
     extreme:    { name: 'Extrême',          record: 'Record Extrême' },
     chaos:      { name: 'Chaos',            record: 'Record Chaos' },
+    trial:      { name: 'Essai',            record: 'Essai' }, // essayer un vaisseau (écran Vaisseaux)
   };
   const EXTRA_MODES = ['bossrush', 'extreme', 'chaos']; // records rangés ensemble
 
@@ -1229,8 +1232,9 @@
     shownScore: 0,
 
     // Modes : 'normal', 'daily' (défi du jour), 'timeattack' (contre-la-montre), 'zen',
-    // 'bossrush', 'extreme', 'chaos'
+    // 'bossrush', 'extreme', 'chaos', 'trial' (essai d'un vaisseau, 20 s)
     mode: 'normal',
+    trialShip: '', // vaisseau essayé (il ne remplace pas le vaisseau choisi)
     diff: 'normal', // difficulté de la partie en cours
     modeRecords: loadJSON(CONFIG.STORAGE_KEY_MODES, {}), // records Boss Rush, Extrême, Chaos
     dailyKey: '',
@@ -1293,8 +1297,10 @@
     };
   }
 
+  // Vaisseau utilisé : celui qu'on essaie pendant un essai, sinon le vaisseau choisi
   function currentShip() {
-    for (const ship of SHIPS) if (ship.id === game.shipId) return ship;
+    const id = game.trialShip || game.shipId;
+    for (const ship of SHIPS) if (ship.id === id) return ship;
     return SHIPS[0];
   }
 
@@ -1318,6 +1324,12 @@
   }
 
   function diffInfo() { return DIFFICULTY[game.diff] || DIFFICULTY.normal; }
+
+  // Modes où rien n'est enregistré : zen et essai d'un vaisseau
+  // (ni record, ni points, ni missions, ni succès, ni classement ; le zen compte dans les stats)
+  function noRecordMode() {
+    return game.mode === 'zen' || game.mode === 'trial';
+  }
 
   // Modes "classiques" : seuls ceux-là comptent pour les succès de temps et de niveau
   function standardMode() {
@@ -1410,7 +1422,7 @@
 
   // Débloque un succès (jamais en mode zen) : points cumulés + notification
   function unlockAchievement(id) {
-    if (game.mode === 'zen' || ach.unlocked[id]) return;
+    if (noRecordMode() || ach.unlocked[id]) return;
     let info = null;
     for (const a of ACHIEVEMENTS) if (a.id === id) info = a;
     if (!info) return;
@@ -1424,7 +1436,7 @@
 
   // Vérifie les succès liés à la partie en cours
   function checkAchievements() {
-    if (game.mode === 'zen' || !game.player) return;
+    if (noRecordMode() || !game.player) return;
     const s = game.stats;
     if (s.grazes >= 10) unlockAchievement('funambule');
     if (s.bestCombo >= 5) unlockAchievement('combo-parfait');
@@ -1442,7 +1454,7 @@
 
   // En fin de partie : meilleures valeurs + succès de fin
   function finishAchievements(finalScore) {
-    if (game.mode === 'zen') return;
+    if (noRecordMode()) return;
     if (standardMode()) {
       recordBest('time', Math.floor(game.time));
       recordBest('level', game.level);
@@ -1559,7 +1571,9 @@
   // Remet ABSOLUMENT TOUT à zéro pour une nouvelle partie
   function resetGame(mode) {
     game.mode = MODES.indexOf(mode) >= 0 ? mode : 'normal';
-    game.diff = game.mode === 'daily' ? 'normal' : settings.difficulty; // le défi reste le même pour tous
+    if (game.mode !== 'trial') game.trialShip = '';
+    // Le défi du jour reste le même pour tous ; l'essai d'un vaisseau aussi
+    game.diff = game.mode === 'daily' || game.mode === 'trial' ? 'normal' : settings.difficulty;
     game.dailyKey = todayKey();
     game.dailyBest = loadDailyBest(game.dailyKey);
     game.newDailyRecord = false;
@@ -1578,7 +1592,7 @@
     game.stats.smashed = 0;
     clearToasts();
     // Tutoriel au tout premier lancement de l'appareil
-    game.tuto.active = storage.get(CONFIG.STORAGE_KEY_TUTO, '') !== '1';
+    game.tuto.active = game.mode !== 'trial' && storage.get(CONFIG.STORAGE_KEY_TUTO, '') !== '1';
     game.tuto.step = 0;
     game.tuto.moved = 0;
     // Défi du jour : la même graine pour tout le monde ce jour-là.
@@ -1618,6 +1632,10 @@
     game.finalScore = 0;
     game.shownScore = 0;
     input.dashQueued = false;
+    if (game.mode === 'trial') {
+      game.level = CONFIG.TRIAL_LEVEL; // dangers du niveau 3 pendant tout l'essai
+      game.powerupTimer = 5;           // un bonus arrive vite (pour voir l'effet du Prisme, par exemple)
+    }
   }
 
   /* ====================================================================
@@ -1888,6 +1906,9 @@
 
   const ui = {
     hud: $('hud'),
+    trialBar: $('trial-bar'),
+    trialText: $('trial-text'),
+    trialFill: $('trial-fill'),
     score: $('hud-score'),
     best: $('hud-best'),
     level: $('hud-level'),
@@ -2023,7 +2044,9 @@
 
   function updateUI() {
     const s = game.state;
-    ui.hud.classList.toggle('hidden', s === 'menu');
+    const trial = game.mode === 'trial' && s !== 'menu';
+    ui.hud.classList.toggle('hidden', s === 'menu' || trial);
+    ui.trialBar.classList.toggle('hidden', !trial);
     ui.powerups.classList.toggle('hidden', s === 'menu');
     ui.btnPause.classList.toggle('hidden', s !== 'playing');
     ui.tuto.classList.toggle('hidden', !(s === 'playing' && game.tuto.active));
@@ -2051,6 +2074,7 @@
     score: null, best: null, level: null,
     comboVisible: null, comboMult: null, comboSteps: null, comboRatio: null,
     slotLabel: null, slotBar: null, slotRatio: null,
+    trialLeft: null, trialRatio: null,
   };
 
   // Record affiché selon le mode
@@ -2082,8 +2106,9 @@
     if (game.state === 'menu') return;
     const score = Math.floor(game.score);
     if (score !== hudCache.score) { ui.score.textContent = formatScore(score); hudCache.score = score; }
-    if (game.mode === 'zen') {
-      if (hudCache.best !== 'zen') { ui.best.textContent = 'ZEN'; hudCache.best = 'zen'; }
+    if (noRecordMode()) {
+      const label = game.mode === 'trial' ? 'ESSAI' : 'ZEN';
+      if (hudCache.best !== label) { ui.best.textContent = label; hudCache.best = label; }
     } else {
       const best = Math.max(modeBest(), score);
       if (best !== hudCache.best) { ui.best.textContent = formatScore(best); hudCache.best = best; }
@@ -2096,6 +2121,17 @@
     if (showBar) {
       const r = Math.round(clamp(slot.ratio, 0, 1) * 100) / 100;
       if (r !== hudCache.slotRatio) { ui.hudBarFill.style.transform = 'scaleX(' + r + ')'; hudCache.slotRatio = r; }
+    }
+    if (game.mode === 'trial') {
+      // Bandeau "ESSAI : Nova · 14 s"
+      const left = Math.max(0, CONFIG.TRIAL_DURATION - game.time);
+      const secs = Math.ceil(left);
+      if (secs !== hudCache.trialLeft) {
+        ui.trialText.textContent = 'ESSAI : ' + currentShip().name + ' · ' + secs + ' s';
+        hudCache.trialLeft = secs;
+      }
+      const r = Math.round((left / CONFIG.TRIAL_DURATION) * 100) / 100;
+      if (r !== hudCache.trialRatio) { ui.trialFill.style.transform = 'scaleX(' + r + ')'; hudCache.trialRatio = r; }
     }
     if (!ui.toast.classList.contains('hidden')) placeToast();
     if (!ui.tip.classList.contains('hidden')) placeTip();
@@ -2182,6 +2218,9 @@
     hudCache.best = null; // force la mise à jour
     hudCache.slotLabel = null;
     hudCache.level = null;
+    hudCache.trialLeft = null;
+    hudCache.trialRatio = null;
+    ui.trialBar.style.setProperty('--ship-color', currentShip().rainbow ? '#ffffff' : currentShip().color);
   }
 
   function refreshMenu() {
@@ -2257,12 +2296,17 @@
   }
 
   // Place la notification juste sous le score, le combo et les bonus : elle ne cache rien
-  function placeToast() {
-    let bottom = ui.hud.getBoundingClientRect().bottom;
+  // Bas du HUD (ou du bandeau d'essai), du combo et des bonus actifs
+  function hudBottom() {
+    let bottom = Math.max(ui.hud.getBoundingClientRect().bottom, ui.trialBar.getBoundingClientRect().bottom);
     for (const el of ui.powerups.children) {
       if (!el.classList.contains('hidden')) bottom = Math.max(bottom, el.getBoundingClientRect().bottom);
     }
-    ui.toast.style.top = Math.round(bottom + 10) + 'px';
+    return bottom;
+  }
+
+  function placeToast() {
+    ui.toast.style.top = Math.round(hudBottom() + 10) + 'px';
   }
 
   // --- Astuces au premier contact ---
@@ -2339,10 +2383,7 @@
 
   // La bulle se place sous le score, le combo, les bonus et la notification
   function placeTip() {
-    let bottom = ui.hud.getBoundingClientRect().bottom;
-    for (const el of ui.powerups.children) {
-      if (!el.classList.contains('hidden')) bottom = Math.max(bottom, el.getBoundingClientRect().bottom);
-    }
+    let bottom = hudBottom();
     if (!ui.toast.classList.contains('hidden')) bottom = Math.max(bottom, ui.toast.getBoundingClientRect().bottom);
     ui.tip.style.top = Math.round(bottom + 10) + 'px';
   }
@@ -2611,7 +2652,16 @@
     desc.textContent = ship.desc;
     el.appendChild(title);
     el.appendChild(desc);
-    if (shipOwned(ship)) return;
+    // Essayer le vaisseau 20 s (verrouillé ou non), sans changer le vaisseau choisi
+    const tryBtn = document.createElement('button');
+    tryBtn.type = 'button';
+    tryBtn.className = 'btn btn-small ship-try';
+    tryBtn.textContent = 'Essayer 20 s';
+    tryBtn.addEventListener('click', function () { Sound.unlock(); startTrial(ship); });
+    if (shipOwned(ship)) {
+      el.appendChild(tryBtn);
+      return;
+    }
     const list = document.createElement('ul');
     list.className = 'ship-needs';
     const addNeed = function (ok, text) {
@@ -2625,6 +2675,7 @@
       (missing > 0 ? ' (encore ' + formatScore(missing) + ')' : ''));
     if (ship.need) addNeed(shipNeedMet(ship), 'Exploit : ' + SHIP_NEEDS[ship.need].text.toLowerCase());
     el.appendChild(list);
+    el.appendChild(tryBtn);
   }
 
   function selectShip(ship, tile) {
@@ -3126,7 +3177,7 @@
 
   // Valeur de la partie en cours (0 si elle est déjà comptée)
   function missionGameValue(stat) {
-    if (game.missionsCommitted || game.mode === 'zen' || !game.player || game.tuto.active) return 0;
+    if (game.missionsCommitted || noRecordMode() || !game.player || game.tuto.active) return 0;
     const st = game.stats;
     switch (stat) {
       case 'grazes': return st.grazes;
@@ -3150,7 +3201,7 @@
   }
 
   function checkMissions() {
-    if (game.mode === 'zen') return;
+    if (noRecordMode()) return;
     const ms = ensureMissionsDay();
     for (const id of ms.ids) {
       if (ms.done[id]) continue;
@@ -3173,7 +3224,7 @@
 
   // Fin de partie : la partie s'ajoute aux missions du jour
   function commitMissions() {
-    if (game.mode === 'zen' || game.missionsCommitted) return;
+    if (noRecordMode() || game.missionsCommitted) return;
     const ms = ensureMissionsDay();
     const add = function (stat, v) { ms.sums[stat] = (ms.sums[stat] || 0) + v; };
     const keepMax = function (stat, v) { ms.maxes[stat] = Math.max(ms.maxes[stat] || 0, v); };
@@ -3669,6 +3720,7 @@
     input.dashQueued = false;
     setState('paused');
     buildPauseSettings();
+    $('btn-quit').textContent = game.mode === 'trial' ? 'Arrêter l\'essai' : 'Menu principal';
     showScreen('pause');
     Music.want(false);
   }
@@ -3730,6 +3782,7 @@
     game.newRecord = false;
     game.newDailyRecord = false;
     game.newModeRecord = false;
+    if (mode === 'trial') return ''; // essai d'un vaisseau : rien n'est enregistré, même pas les stats
     if (mode === 'zen') {
       commitStats();
       return '';
@@ -3751,6 +3804,10 @@
 
   function goToMenu() {
     if (game.state !== 'paused' && game.state !== 'gameover') return;
+    if (game.mode === 'trial') {
+      endTrial(); // essai arrêté depuis la pause : retour sur la fiche du vaisseau
+      return;
+    }
     if (game.state === 'paused' && !game.tuto.active) {
       // Partie quittée en cours : son score compte quand même (sauf en zen)
       finishRun(Math.floor(game.score));
@@ -3774,21 +3831,23 @@
   // cause : ce qui l'a touché (voir DEATH_CAUSES), affiché sur l'écran de fin
   function hitPlayer(x, y, hazard, cause) {
     if (game.effects.shield > 0) absorbHit(x, y, hazard);
-    else if (game.mode === 'zen') zenHit(x, y, hazard);
+    else if (noRecordMode()) zenHit(x, y, hazard); // zen et essai : pas de mort
     else killPlayer(cause);
   }
 
   // Mode zen : pas de mort, mais le combo et 100 points sont perdus
+  // (l'essai d'un vaisseau fonctionne pareil, sans score à perdre)
   function zenHit(x, y, hazard) {
     const p = game.player;
+    const zen = game.mode === 'zen';
     if (hazard) hazard.dead = true;
     breakCombo();
-    game.score = Math.max(0, game.score - CONFIG.ZEN_HIT_PENALTY);
+    if (zen) game.score = Math.max(0, game.score - CONFIG.ZEN_HIT_PENALTY);
     p.grace = CONFIG.ZEN_GRACE;
     game.flash = Math.max(game.flash, reducedFx() ? 0.15 : 0.35);
     game.shake = Math.max(game.shake, reducedFx() ? 2 : 8);
     burst(x, y, { count: 24, colors: [COLORS.shard, COLORS.white], speed: [80, 300], life: [0.3, 0.7], size: [2, 4], drag: 2.5 });
-    addText(p.x, p.y - 36, '-' + CONFIG.ZEN_HIT_PENALTY, COLORS.shard, 18, 0.9, -40);
+    if (zen) addText(p.x, p.y - 36, '-' + CONFIG.ZEN_HIT_PENALTY, COLORS.shard, 18, 0.9, -40);
     Sound.zenHit();
   }
 
@@ -3806,6 +3865,34 @@
     Sound.explosion();
     Music.want(false);
     setState('dying');
+  }
+
+  // Essayer un vaisseau (bouton sur sa fiche) : verrouillé ou non, 20 s sans risque
+  function startTrial(ship) {
+    if (game.state !== 'menu') return;
+    game.trialShip = ship.id;
+    startGame('trial');
+  }
+
+  // Fin de l'essai (temps écoulé ou arrêté) : rien n'est enregistré, retour sur la fiche
+  function endTrial() {
+    const shipId = game.trialShip;
+    finishRun(0); // ne fait rien en essai, mais toute fin de partie passe par là
+    Music.want(false);
+    clearWorld();
+    game.player = null;
+    game.trialShip = '';
+    game.tuto.active = false;
+    resetCombo();
+    clearPowerupEffects();
+    clearToasts();
+    clearTips();
+    input.dashQueued = false;
+    setState('menu');
+    hangarFocus = shipId || game.shipId;
+    buildHangar();
+    showScreen('hangar');
+    ui.shipInfo.scrollIntoView({ block: 'center' });
   }
 
   // Contre-la-montre : le temps est écoulé
@@ -4113,7 +4200,7 @@
     if (p.dashCooldown <= 0) p.dashCooldown = dashCooldownTime();
     p.angle = Math.atan2(p.dashDirY, p.dashDirX);
     game.stats.dashes++;
-    if (game.mode !== 'zen') ach.dashes++; // pour le succès "Vitesse lumière"
+    if (!noRecordMode()) ach.dashes++; // pour le succès "Vitesse lumière"
     addRing(p.x, p.y, 8, 55, 0.3, shipColor(), 3);
     Sound.dash();
   }
@@ -5363,7 +5450,13 @@
       endTimeAttack();
       return;
     }
-    if (game.mode === 'bossrush') {
+    // Essai d'un vaisseau : 20 s, au niveau 3, puis retour sur sa fiche
+    if (game.mode === 'trial') {
+      if (game.time >= CONFIG.TRIAL_DURATION) {
+        endTrial();
+        return;
+      }
+    } else if (game.mode === 'bossrush') {
       // Boss Rush : un boss après l'autre, avec un petit répit entre deux
       if (!game.boss.active) {
         game.rushTimer -= dt;
