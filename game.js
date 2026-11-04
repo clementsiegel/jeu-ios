@@ -509,6 +509,9 @@
   function clamp(v, min, max) { return v < min ? min : (v > max ? max : v); }
   function angleDiff(from, to) { return Math.atan2(Math.sin(to - from), Math.cos(to - from)); }
   function $(id) { return document.getElementById(id); }
+  // La clé existe vraiment dans l'objet (pas "constructor", "toString"…)
+  function has(obj, key) { return typeof key === 'string' && Object.prototype.hasOwnProperty.call(obj, key); }
+  function isPlainObject(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
 
   // Supprime d'une liste les éléments qui ne doivent plus exister (sans créer de nouveau tableau)
   function removeDead(list, keep) {
@@ -678,18 +681,23 @@
   // --- Réglages du joueur ---
   const JOYSTICK_SIZES = { small: 48, medium: CONFIG.JOYSTICK_RADIUS, large: 74 };
 
-  function loadSettings() {
+  // Réglages vérifiés un par un : une valeur absente ou bizarre reprend sa valeur par défaut
+  // (sert aussi pour les codes de sauvegarde importés)
+  function sanitizeSettings(data) {
     const s = { music: 60, sfx: 100, joystick: 'medium', reduceFx: false, difficulty: 'normal', tips: true };
-    const data = loadJSON(CONFIG.STORAGE_KEY_SETTINGS, null);
-    if (data) {
+    if (isPlainObject(data)) {
       if (Number.isFinite(data.music)) s.music = clamp(Math.round(data.music), 0, 100);
       if (Number.isFinite(data.sfx)) s.sfx = clamp(Math.round(data.sfx), 0, 100);
-      if (JOYSTICK_SIZES[data.joystick]) s.joystick = data.joystick;
-      s.reduceFx = !!data.reduceFx;
-      if (DIFFICULTY[data.difficulty]) s.difficulty = data.difficulty;
+      if (has(JOYSTICK_SIZES, data.joystick)) s.joystick = data.joystick;
+      s.reduceFx = data.reduceFx === true;
+      if (has(DIFFICULTY, data.difficulty)) s.difficulty = data.difficulty;
       if (typeof data.tips === 'boolean') s.tips = data.tips;
     }
     return s;
+  }
+
+  function loadSettings() {
+    return sanitizeSettings(loadJSON(CONFIG.STORAGE_KEY_SETTINGS, null));
   }
 
   const settings = loadSettings();
@@ -2212,7 +2220,7 @@
   function loadTipsSeen() {
     const data = loadJSON(CONFIG.STORAGE_KEY_TIPS, null);
     const seen = {};
-    if (Array.isArray(data)) for (const id of data) if (typeof id === 'string' && TIPS[id]) seen[id] = true;
+    if (Array.isArray(data)) for (const id of data) if (has(TIPS, id)) seen[id] = true;
     return seen;
   }
 
@@ -2222,7 +2230,7 @@
 
   // Demande une astuce : elle n'est ajoutée que si elle n'a jamais été vue
   function tipOnce(id) {
-    if (!settings.tips || tips.seen[id] || !TIPS[id]) return;
+    if (!settings.tips || tips.seen[id] || !has(TIPS, id)) return;
     if (game.state !== 'playing' || game.tuto.active || game.boss.active) return;
     if (tips.current === id || tips.queue.indexOf(id) >= 0) return;
     tips.queue.push(id);
@@ -2368,6 +2376,7 @@
     ui.btnTutoAgain.textContent = planned ? 'Prévu' : 'Revoir';
     ui.setTips.checked = settings.tips;
     refreshInstallSetting();
+    resetSavePanels();
     ui.btnTipsAgain.textContent = Object.keys(tips.seen).length ? 'Revoir' : 'Prévu';
   }
 
@@ -3243,6 +3252,307 @@
   }
 
   /* ====================================================================
+     SAUVEGARDE PAR CODE (Réglages > Sauvegarde)
+     "Exporter" fabrique un code texte avec toute la progression ; "Importer"
+     le relit sur un autre appareil. Le code est un JSON { v, d, c } écrit en
+     base64 : v = version du format, d = données, c = somme de contrôle.
+     L'identifiant du joueur, le pseudo et les scores en attente ne sont pas
+     dans le code (ils sont liés au classement en ligne).
+     ==================================================================== */
+
+  const SAVE_FORMAT = 1;
+  const SAVE_MAX_LENGTH = 20 * 1024; // un code plus long est refusé
+  const SAVE_FIELDS = ['points', 'owned', 'ship', 'theme', 'best', 'ta', 'modes', 'ach', 'stats', 'streak', 'tuto', 'settings', 'tips'];
+  const ACH_BEST_KEYS = ['time', 'level', 'grazes', 'combo', 'energy', 'timeattack', 'streak'];
+  const BIG_NUMBER = 1e12;
+
+  function saveChecksum(d) {
+    return hashString('eclats-neon:' + JSON.stringify(d));
+  }
+
+  function toBase64(text) {
+    const bytes = new TextEncoder().encode(text);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+
+  function fromBase64(code) {
+    const bin = atob(code);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  }
+
+  function wholeNumber(v) { return Math.max(0, Math.floor(Number(v) || 0)); }
+  function isCount(v, max) { return Number.isInteger(v) && v >= 0 && v <= max; }
+
+  // Toute la progression, prête à être mise dans un code
+  function buildSaveData() {
+    const modes = {};
+    for (const m of EXTRA_MODES) if (game.modeRecords[m] > 0) modes[m] = wholeNumber(game.modeRecords[m]);
+    const unlocked = {};
+    for (const a of ACHIEVEMENTS) if (ach.unlocked[a.id]) unlocked[a.id] = true;
+    const best = {};
+    for (const k of ACH_BEST_KEYS) if (ach.best[k] > 0) best[k] = wholeNumber(ach.best[k]);
+    const stats = loadStats();
+    for (const k of STAT_KEYS) stats[k] = wholeNumber(stats[k]);
+    const streak = loadStreak();
+    return {
+      points: wholeNumber(game.points),
+      owned: game.owned.slice(),
+      ship: game.shipId,
+      theme: game.themeId,
+      best: wholeNumber(game.best),
+      ta: wholeNumber(game.bestTA),
+      modes: modes,
+      ach: { unlocked: unlocked, best: best, dashes: wholeNumber(ach.dashes), missions: wholeNumber(ach.missions) },
+      stats: stats,
+      streak: { last: streak.last, count: wholeNumber(streak.count), best: wholeNumber(streak.best) },
+      tuto: storage.get(CONFIG.STORAGE_KEY_TUTO, '') === '1',
+      settings: sanitizeSettings(settings),
+      tips: Object.keys(tips.seen),
+    };
+  }
+
+  function makeSaveCode() {
+    const d = buildSaveData();
+    return toBase64(JSON.stringify({ v: SAVE_FORMAT, d: d, c: saveChecksum(d) }));
+  }
+
+  function knownShip(id) { return SHIPS.some(function (s) { return s.id === id; }); }
+  function themeById(id) {
+    for (const t of THEMES) if (t.id === id) return t;
+    return null;
+  }
+
+  // Vérifie chaque donnée (type, limites, vaisseaux et succès connus). null si quelque chose cloche.
+  function validateSaveData(d) {
+    if (!isPlainObject(d)) return null;
+    for (const key in d) if (SAVE_FIELDS.indexOf(key) < 0) return null;
+    for (const key of SAVE_FIELDS) if (!has(d, key)) return null;
+    if (!isCount(d.points, BIG_NUMBER) || !isCount(d.best, BIG_NUMBER) || !isCount(d.ta, BIG_NUMBER)) return null;
+
+    if (!Array.isArray(d.owned) || d.owned.length > SHIPS.length) return null;
+    const owned = ['fleche'];
+    for (const id of d.owned) {
+      if (typeof id !== 'string' || !knownShip(id)) return null;
+      if (owned.indexOf(id) < 0) owned.push(id);
+    }
+    if (typeof d.ship !== 'string' || !knownShip(d.ship)) return null;
+    const theme = typeof d.theme === 'string' ? themeById(d.theme) : null;
+    if (!theme) return null;
+
+    if (!isPlainObject(d.modes)) return null;
+    const modes = {};
+    for (const m in d.modes) {
+      if (EXTRA_MODES.indexOf(m) < 0 || !isCount(d.modes[m], BIG_NUMBER)) return null;
+      modes[m] = d.modes[m];
+    }
+
+    const a = d.ach;
+    if (!isPlainObject(a) || !isPlainObject(a.unlocked) || !isPlainObject(a.best)) return null;
+    if (!isCount(a.dashes, BIG_NUMBER) || !isCount(a.missions, BIG_NUMBER)) return null;
+    const unlocked = {};
+    for (const id in a.unlocked) {
+      if (a.unlocked[id] !== true || !ACHIEVEMENTS.some(function (x) { return x.id === id; })) return null;
+      unlocked[id] = true;
+    }
+    const best = {};
+    for (const k in a.best) {
+      if (ACH_BEST_KEYS.indexOf(k) < 0 || !isCount(a.best[k], BIG_NUMBER)) return null;
+      best[k] = a.best[k];
+    }
+
+    if (!isPlainObject(d.stats)) return null;
+    const stats = {};
+    for (const k in d.stats) if (STAT_KEYS.indexOf(k) < 0) return null;
+    for (const k of STAT_KEYS) {
+      if (!isCount(d.stats[k], BIG_NUMBER)) return null;
+      stats[k] = d.stats[k];
+    }
+
+    const st = d.streak;
+    if (!isPlainObject(st) || typeof st.last !== 'string' || (st.last && !/^\d{4}-\d{2}-\d{2}$/.test(st.last))) return null;
+    if (!isCount(st.count, 100000) || !isCount(st.best, 100000)) return null;
+
+    if (typeof d.tuto !== 'boolean' || !isPlainObject(d.settings)) return null;
+    if (!Array.isArray(d.tips) || d.tips.length > 100) return null;
+    for (const id of d.tips) if (!has(TIPS, id)) return null;
+
+    return {
+      points: d.points,
+      owned: owned,
+      ship: owned.indexOf(d.ship) >= 0 ? d.ship : 'fleche',
+      theme: theme.cost <= d.points ? theme.id : 'neon',
+      best: d.best,
+      ta: d.ta,
+      modes: modes,
+      ach: { unlocked: unlocked, best: best, dashes: a.dashes, missions: a.missions },
+      stats: stats,
+      streak: { last: st.last, count: st.count, best: st.best },
+      tuto: d.tuto,
+      settings: sanitizeSettings(d.settings),
+      tips: d.tips.slice(),
+    };
+  }
+
+  // Lit un code collé par le joueur. Renvoie { data } ou { error: "texte à afficher" }
+  function parseSaveCode(text) {
+    const code = String(text || '').replace(/\s+/g, '');
+    const broken = { error: 'Code abîmé : vérifie que tu l\'as copié en entier.' };
+    if (!code) return { error: 'Colle d\'abord ton code dans la case.' };
+    if (code.length > SAVE_MAX_LENGTH) return { error: 'Ce code est trop long : ce n\'est pas un code d\'Éclats Néon.' };
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(code)) return { error: 'Ce n\'est pas un code d\'Éclats Néon.' };
+    let obj = null;
+    try {
+      obj = JSON.parse(fromBase64(code));
+    } catch (e) {
+      return broken;
+    }
+    if (!isPlainObject(obj)) return broken;
+    if (obj.v !== SAVE_FORMAT) return { error: 'Ce code vient d\'une autre version du jeu.' };
+    if (!isPlainObject(obj.d) || obj.c !== saveChecksum(obj.d)) return broken;
+    const data = validateSaveData(obj.d);
+    return data ? { data: data } : broken;
+  }
+
+  // "42 000 points, 3 vaisseaux, 7 succès"
+  function savePreview(d) {
+    const ships = d.owned.length;
+    const achs = Object.keys(d.ach.unlocked).length;
+    return formatScore(d.points) + ' points, ' + ships + (ships > 1 ? ' vaisseaux, ' : ' vaisseau, ') +
+      achs + ' succès';
+  }
+
+  // Remplace la progression de l'appareil. Renvoie false si le stockage est bloqué.
+  function applySaveData(d) {
+    storage.set(CONFIG.STORAGE_KEY_POINTS, d.points);
+    storage.set(CONFIG.STORAGE_KEY_OWNED, JSON.stringify(d.owned));
+    storage.set(CONFIG.STORAGE_KEY_SHIP, d.ship);
+    storage.set(CONFIG.STORAGE_KEY_THEME, d.theme);
+    storage.set(CONFIG.STORAGE_KEY_BEST, d.best);
+    storage.set(CONFIG.STORAGE_KEY_TIMEATTACK, d.ta);
+    storage.set(CONFIG.STORAGE_KEY_MODES, JSON.stringify(d.modes));
+    storage.set(CONFIG.STORAGE_KEY_ACH, JSON.stringify(d.ach));
+    storage.set(CONFIG.STORAGE_KEY_STATS, JSON.stringify(d.stats));
+    storage.set(CONFIG.STORAGE_KEY_STREAK, JSON.stringify(d.streak));
+    storage.set(CONFIG.STORAGE_KEY_SETTINGS, JSON.stringify(d.settings));
+    storage.set(CONFIG.STORAGE_KEY_TIPS, JSON.stringify(d.tips));
+    if (d.tuto) storage.set(CONFIG.STORAGE_KEY_TUTO, '1');
+    else {
+      try { window.localStorage.removeItem(CONFIG.STORAGE_KEY_TUTO); } catch (e) { /* stockage bloqué */ }
+    }
+    return storage.get(CONFIG.STORAGE_KEY_POINTS, '') === String(d.points) &&
+      storage.get(CONFIG.STORAGE_KEY_OWNED, '') === JSON.stringify(d.owned);
+  }
+
+  // --- Écran des réglages : boutons Exporter / Copier / Importer ---
+
+  const saveUi = { pending: null }; // données vérifiées, en attente de confirmation
+
+  function setSaveMsg(el, text, error) {
+    el.textContent = text;
+    el.classList.toggle('error', !!error);
+  }
+
+  function resetSavePanels() {
+    saveUi.pending = null;
+    $('save-export').classList.add('hidden');
+    $('save-import').classList.add('hidden');
+    $('save-confirm').classList.add('hidden');
+    $('save-export-code').value = '';
+    $('save-import-code').value = '';
+    setSaveMsg($('save-export-msg'), '');
+    setSaveMsg($('save-import-msg'), '');
+  }
+
+  function showExport() {
+    resetSavePanels();
+    $('save-export-code').value = makeSaveCode();
+    $('save-export').classList.remove('hidden');
+    Sound.click();
+  }
+
+  function selectExportCode() {
+    const field = $('save-export-code');
+    field.focus();
+    field.select();
+    try { field.setSelectionRange(0, field.value.length); } catch (e) { /* iPhone ancien */ }
+  }
+
+  function copySaveCode() {
+    const code = $('save-export-code').value;
+    const msg = $('save-export-msg');
+    const fallback = function () {
+      // Repli : le code est sélectionné, le joueur peut le copier lui-même
+      selectExportCode();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      setSaveMsg(msg, ok ? 'Code copié ! Garde-le bien (notes, message à toi-même…).' : 'Le code est sélectionné : copie-le avec le menu du téléphone.');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(function () {
+        setSaveMsg(msg, 'Code copié ! Garde-le bien (notes, message à toi-même…).');
+      }, fallback);
+    } else {
+      fallback();
+    }
+    Sound.click();
+  }
+
+  function showImport() {
+    resetSavePanels();
+    $('save-import').classList.remove('hidden');
+    Sound.click();
+  }
+
+  function checkSaveCode() {
+    const result = parseSaveCode($('save-import-code').value);
+    const msg = $('save-import-msg');
+    $('save-confirm').classList.toggle('hidden', !result.data);
+    saveUi.pending = result.data || null;
+    if (result.error) {
+      setSaveMsg(msg, result.error, true);
+      Sound.denied();
+      return;
+    }
+    setSaveMsg(msg, '');
+    $('save-preview').textContent = 'Ce code contient : ' + savePreview(result.data) + '.';
+    Sound.click();
+  }
+
+  function confirmImport() {
+    const data = saveUi.pending;
+    if (!data) return;
+    if (!applySaveData(data)) {
+      setSaveMsg($('save-import-msg'), 'Impossible d\'enregistrer sur cet appareil (navigation privée ?).', true);
+      return;
+    }
+    $('save-confirm').classList.add('hidden');
+    setSaveMsg($('save-import-msg'), 'Progression importée ! Le jeu redémarre…');
+    Sound.achievement();
+    setTimeout(function () { location.reload(); }, 900);
+  }
+
+  function bindSaveCode() {
+    bindButton('btn-save-export', showExport);
+    bindButton('btn-save-copy', copySaveCode);
+    bindButton('btn-save-import', showImport);
+    bindButton('btn-save-check', checkSaveCode);
+    bindButton('btn-save-apply', confirmImport);
+    bindButton('btn-save-cancel', function () {
+      resetSavePanels();
+      Sound.click();
+    });
+    $('save-export-code').addEventListener('focus', selectExportCode);
+    $('save-import-code').addEventListener('input', function () {
+      saveUi.pending = null;
+      $('save-confirm').classList.add('hidden');
+    });
+  }
+
+  /* ====================================================================
      9. DÉROULEMENT D'UNE PARTIE
      Chaque fonction vérifie l'état actuel : un double clic ou une touche
      appuyée deux fois ne peut jamais lancer deux parties en même temps.
@@ -3395,7 +3705,7 @@
   function killPlayer(cause) {
     const p = game.player;
     p.alive = false;
-    game.deathCause = DEATH_CAUSES[cause] ? cause : '';
+    game.deathCause = has(DEATH_CAUSES, cause) ? cause : '';
     clearPowerupEffects(); // les bonus s'arrêtent à la mort
     resetCombo();
     explode(p.x, p.y);
@@ -6327,6 +6637,7 @@
     bindSettings();
     bindLeaderboard();
     bindInstall();
+    bindSaveCode();
     applyReduceFx();
     bindButton('btn-resume', resumeGame);
     bindButton('btn-quit', function () { Sound.click(); goToMenu(); });

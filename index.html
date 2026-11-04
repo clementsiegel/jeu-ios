@@ -456,6 +456,40 @@
             <button type="button" id="btn-tips-again" class="btn btn-small">Revoir</button>
           </div>
         </div>
+
+        <h3 class="sub-title">Sauvegarde</h3>
+        <div class="setting setting-stack save-box">
+          <span class="setting-name">Code de sauvegarde <small>Garde ce code pour retrouver ta progression sur un autre appareil.</small></span>
+          <div class="save-actions">
+            <button type="button" id="btn-save-export" class="btn btn-small">Exporter</button>
+            <button type="button" id="btn-save-import" class="btn btn-small">Importer</button>
+          </div>
+          <!-- Exporter : le code à copier -->
+          <div id="save-export" class="save-panel hidden">
+            <textarea id="save-export-code" class="save-code" rows="4" readonly aria-label="Ton code de sauvegarde"></textarea>
+            <div class="save-actions">
+              <button type="button" id="btn-save-copy" class="btn btn-small btn-primary">Copier</button>
+            </div>
+            <p id="save-export-msg" class="save-msg" role="status" aria-live="polite"></p>
+          </div>
+          <!-- Importer : coller un code, vérifier, puis confirmer -->
+          <div id="save-import" class="save-panel hidden">
+            <label for="save-import-code" class="save-label">Colle ton code ici</label>
+            <textarea id="save-import-code" class="save-code" rows="4" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"></textarea>
+            <div class="save-actions">
+              <button type="button" id="btn-save-check" class="btn btn-small btn-primary">Vérifier</button>
+            </div>
+            <p id="save-import-msg" class="save-msg" role="status" aria-live="polite"></p>
+            <div id="save-confirm" class="save-confirm hidden">
+              <p id="save-preview" class="save-preview"></p>
+              <p class="save-warn">Ta progression actuelle sera remplacée.</p>
+              <div class="save-actions">
+                <button type="button" id="btn-save-apply" class="btn btn-small btn-primary">Remplacer</button>
+                <button type="button" id="btn-save-cancel" class="btn btn-small">Annuler</button>
+              </div>
+            </div>
+          </div>
+        </div>
         <p class="version-line">Éclats Néon · version <span id="game-version">2.1</span></p>
       </div>
     </section>

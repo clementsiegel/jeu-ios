@@ -1776,6 +1776,85 @@ kbd {
   accent-color: var(--cyan);
 }
 
+/* Sauvegarde par code */
+.save-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.save-actions .btn {
+  min-height: 44px;
+}
+
+.save-panel {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.save-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.save-code {
+  width: 100%;
+  min-height: 96px;
+  padding: 8px 10px;
+  border: 2px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.35 var(--mono); /* 16 px minimum : l'iPhone ne zoome pas sur le champ */
+  word-break: break-all;
+  resize: vertical;
+  -webkit-user-select: text;
+  user-select: text;
+  outline: none;
+}
+
+.save-code:focus {
+  border-color: var(--cyan);
+}
+
+.save-msg {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--green);
+}
+
+.save-msg:empty {
+  display: none;
+}
+
+.save-msg.error {
+  color: var(--pink);
+}
+
+.save-confirm {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-left: 5px solid var(--yellow);
+  background: var(--panel-2);
+}
+
+.save-preview {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.save-warn {
+  margin: 0;
+  font-size: 13px;
+  color: var(--yellow);
+}
+
 /* Choix à plusieurs boutons collés (difficulté, joystick, onglets) */
 .segmented {
   display: flex;
