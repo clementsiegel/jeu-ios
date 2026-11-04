@@ -260,6 +260,7 @@
     FLASH_DECAY: 2.2,
     SCORE_COUNT_DURATION: 0.9,
     GAMEOVER_INPUT_DELAY: 500, // ms avant que Entrée puisse relancer (évite les relances par accident)
+    TIP_DURATION: 3,         // secondes d'affichage d'une astuce
     VOLUME: 0.45,
 
     // --- Sauvegarde ---
@@ -282,6 +283,7 @@
     STORAGE_KEY_STREAK: 'eclatsNeon.serie',
     STORAGE_KEY_STATS: 'eclatsNeon.stats',
     STORAGE_KEY_THEME: 'eclatsNeon.theme',
+    STORAGE_KEY_TIPS: 'eclatsNeon.astuces',    // astuces déjà vues (une seule fois chacune)
     // Changer ce numéro efface la progression de TOUS les joueurs
     // (records, points, vaisseaux, succès) au lancement suivant. Le réglage du son est gardé.
     DATA_VERSION: '2',
@@ -339,6 +341,28 @@
   };
   const POWERUP_TYPES = Object.keys(POWERUPS);
   const TIMED_POWERUPS = POWERUP_TYPES.filter(function (t) { return !!POWERUPS[t].durationKey; });
+
+  // Astuces : une bulle courte (10 mots maximum) la première fois qu'un élément
+  // apparaît ou est ramassé. c : couleur de la bande (nom dans COLORS).
+  const TIPS = {
+    laser:    { c: 'laser',   text: 'Laser : sors de la ligne avant le tir.' },
+    mine:     { c: 'mine',    text: 'Mine : elle explose en anneau. Éloigne-toi !' },
+    hole:     { c: 'hole',    text: 'Trou noir : il t\'attire. Fuis avec un dash.' },
+    wall:     { c: 'wall',    text: 'Mur : passe par le trou avant qu\'il arrive.' },
+    turret:   { c: 'turret',  text: 'Tourelle : elle te vise. Ne reste pas immobile.' },
+    bouncer:  { c: 'bouncer', text: 'Rebondisseur : il rebondit sur les bords.' },
+    seeker:   { c: 'seeker',  text: 'Traqueur : il te suit. Bouge sans arrêt.' },
+    splitter: { c: 'shard',   text: 'Gros éclat : il se divise en trois morceaux.' },
+    boss:     { c: 'boss',    text: 'Boss bientôt : survis jusqu\'à la fin du chrono.' },
+    shield:   { c: 'shield',  text: 'Bouclier : il encaisse un coup à ta place.' },
+    slow:     { c: 'slow',    text: 'Ralenti : les dangers vont deux fois moins vite.' },
+    magnet:   { c: 'magnet',  text: 'Aimant : l\'énergie proche vient toute seule vers toi.' },
+    mini:     { c: 'mini',    text: 'Mini : ton vaisseau rétrécit, plus dur à toucher.' },
+    double:   { c: 'double',  text: 'Score x2 : tous tes points comptent double.' },
+    bomb:     { c: 'bomb',    text: 'Bombe : tous les dangers à l\'écran explosent.' },
+    combo:    { c: 'combo',   text: 'Combo : enchaîne frôlements et énergie, tes points grimpent.' },
+    graze:    { c: 'player',  text: 'Frôlé ! Passer tout près rapporte des points.' },
+  };
 
   // Durée d'un bonus (le Prisme les fait durer plus longtemps)
   function powerupDuration(type) {
@@ -654,7 +678,7 @@
   const JOYSTICK_SIZES = { small: 48, medium: CONFIG.JOYSTICK_RADIUS, large: 74 };
 
   function loadSettings() {
-    const s = { music: 60, sfx: 100, joystick: 'medium', reduceFx: false, difficulty: 'normal' };
+    const s = { music: 60, sfx: 100, joystick: 'medium', reduceFx: false, difficulty: 'normal', tips: true };
     const data = loadJSON(CONFIG.STORAGE_KEY_SETTINGS, null);
     if (data) {
       if (Number.isFinite(data.music)) s.music = clamp(Math.round(data.music), 0, 100);
@@ -662,6 +686,7 @@
       if (JOYSTICK_SIZES[data.joystick]) s.joystick = data.joystick;
       s.reduceFx = !!data.reduceFx;
       if (DIFFICULTY[data.difficulty]) s.difficulty = data.difficulty;
+      if (typeof data.tips === 'boolean') s.tips = data.tips;
     }
     return s;
   }
@@ -1514,6 +1539,7 @@
     game.sessionShips = [];
     game.sessionStreak = '';
     game.missionsCommitted = false;
+    clearTips();
     ensureMissionsDay();
     game.stats.dashes = 0;
     game.stats.bosses = 0;
@@ -1857,6 +1883,10 @@
     goCauseTip: $('go-cause-tip'),
     goAch: $('go-ach'),
     toast: $('toast'),
+    tip: $('tip'),
+    tipText: $('tip-text'),
+    setTips: $('set-tips'),
+    btnTipsAgain: $('btn-tips-again'),
     tuto: $('tuto'),
     tutoStep: $('tuto-step'),
     tutoText: $('tuto-text'),
@@ -1937,6 +1967,7 @@
     ui.btnPause.classList.toggle('hidden', s !== 'playing');
     ui.tuto.classList.toggle('hidden', !(s === 'playing' && game.tuto.active));
     if (s !== 'playing') ui.toast.classList.add('hidden');
+    ui.tip.classList.toggle('hidden', !(s === 'playing' && tips.current));
     refreshUpdateBar();
     updateJoystickHome();
   }
@@ -2006,6 +2037,7 @@
       if (r !== hudCache.slotRatio) { ui.hudBarFill.style.transform = 'scaleX(' + r + ')'; hudCache.slotRatio = r; }
     }
     if (!ui.toast.classList.contains('hidden')) placeToast();
+    if (!ui.tip.classList.contains('hidden')) placeTip();
 
     // Combo : multiplicateur, progression vers le suivant et temps restant
     const c = game.combo;
@@ -2147,6 +2179,88 @@
     ui.toast.style.top = Math.round(bottom + 10) + 'px';
   }
 
+  // --- Astuces au premier contact ---
+  // Une seule bulle à la fois (file d'attente), jamais pendant un boss ni le tutoriel.
+  // Chaque astuce n'apparaît qu'une fois (liste sauvegardée).
+  const tips = { seen: loadTipsSeen(), queue: [], current: '', timer: 0 };
+
+  function loadTipsSeen() {
+    const data = loadJSON(CONFIG.STORAGE_KEY_TIPS, null);
+    const seen = {};
+    if (Array.isArray(data)) for (const id of data) if (typeof id === 'string' && TIPS[id]) seen[id] = true;
+    return seen;
+  }
+
+  function saveTipsSeen() {
+    storage.set(CONFIG.STORAGE_KEY_TIPS, JSON.stringify(Object.keys(tips.seen)));
+  }
+
+  // Demande une astuce : elle n'est ajoutée que si elle n'a jamais été vue
+  function tipOnce(id) {
+    if (!settings.tips || tips.seen[id] || !TIPS[id]) return;
+    if (game.state !== 'playing' || game.tuto.active || game.boss.active) return;
+    if (tips.current === id || tips.queue.indexOf(id) >= 0) return;
+    tips.queue.push(id);
+    if (!tips.current) nextTip();
+  }
+
+  function tipColor(id) {
+    return POWERUPS[id] ? POWERUPS[id].color : COLORS[TIPS[id].c];
+  }
+
+  function nextTip() {
+    tips.current = '';
+    const id = game.boss.active ? '' : tips.queue.shift();
+    if (!id) {
+      ui.tip.classList.add('hidden');
+      return;
+    }
+    tips.current = id;
+    tips.seen[id] = true;
+    saveTipsSeen();
+    ui.tipText.textContent = TIPS[id].text;
+    ui.tip.style.setProperty('--tip', tipColor(id));
+    ui.tip.classList.remove('hidden');
+    // relance l'animation d'apparition
+    ui.tip.style.animation = 'none';
+    void ui.tip.offsetWidth;
+    ui.tip.style.animation = '';
+    placeTip();
+    tips.timer = CONFIG.TIP_DURATION;
+  }
+
+  function updateTips(dt) {
+    if (tips.current) {
+      // Un boss arrive : la bulle disparaît (les suivantes attendent la fin du boss)
+      if (game.boss.active) {
+        tips.current = '';
+        ui.tip.classList.add('hidden');
+        return;
+      }
+      tips.timer -= dt;
+      if (tips.timer <= 0) nextTip();
+    } else if (tips.queue.length && !game.boss.active && !game.tuto.active) {
+      nextTip();
+    }
+  }
+
+  function clearTips() {
+    tips.queue.length = 0;
+    tips.current = '';
+    tips.timer = 0;
+    ui.tip.classList.add('hidden');
+  }
+
+  // La bulle se place sous le score, le combo, les bonus et la notification
+  function placeTip() {
+    let bottom = ui.hud.getBoundingClientRect().bottom;
+    for (const el of ui.powerups.children) {
+      if (!el.classList.contains('hidden')) bottom = Math.max(bottom, el.getBoundingClientRect().bottom);
+    }
+    if (!ui.toast.classList.contains('hidden')) bottom = Math.max(bottom, ui.toast.getBoundingClientRect().bottom);
+    ui.tip.style.top = Math.round(bottom + 10) + 'px';
+  }
+
   // --- Sous-écrans du menu ---
 
   function openSubScreen(name, build) {
@@ -2227,6 +2341,8 @@
     ui.setReduce.checked = settings.reduceFx;
     const planned = storage.get(CONFIG.STORAGE_KEY_TUTO, '') !== '1';
     ui.btnTutoAgain.textContent = planned ? 'Prévu' : 'Revoir';
+    ui.setTips.checked = settings.tips;
+    ui.btnTipsAgain.textContent = Object.keys(tips.seen).length ? 'Revoir' : 'Prévu';
   }
 
   function applyReduceFx() {
@@ -2269,6 +2385,19 @@
       settings.reduceFx = ui.setReduce.checked;
       saveSettings();
       applyReduceFx();
+    });
+    ui.setTips.addEventListener('change', function () {
+      settings.tips = ui.setTips.checked;
+      saveSettings();
+    });
+    ui.btnTipsAgain.addEventListener('click', function () {
+      // Toutes les astuces pourront réapparaître (et le réglage se rallume)
+      tips.seen = {};
+      saveTipsSeen();
+      settings.tips = true;
+      saveSettings();
+      buildSettings();
+      Sound.click();
     });
     ui.btnTutoAgain.addEventListener('click', function () {
       try { window.localStorage.removeItem(CONFIG.STORAGE_KEY_TUTO); } catch (e) { /* stockage bloqué */ }
@@ -3102,6 +3231,10 @@
     showScreen(null);
     setState('playing');
     if (game.tuto.active) showTutoStep();
+    if (game.mode === 'bossrush' && settings.tips && !tips.seen.boss) {
+      tipOnce('boss');
+      game.rushTimer = Math.max(game.rushTimer, CONFIG.TIP_DURATION); // le temps de la lire
+    }
     Sound.start();
     Music.want(true); // la musique repart du début
   }
@@ -3205,6 +3338,7 @@
     resetCombo();
     clearPowerupEffects();
     clearToasts();
+    clearTips();
     refreshMenu();
     showScreen('menu');
     setState('menu');
@@ -3659,6 +3793,7 @@
       type: type, x: x, y: y, r: r, angle: angle, speed: baseSpeed * speedMult,
       rot: rot, spin: spin, points: points, splitSeed: splitSeed,
     }));
+    if (type !== 'shard') tipOnce(type); // traqueur, gros éclat, rebondisseur
   }
 
   function spawnWave() {
@@ -3844,6 +3979,7 @@
       addLaser(!horizontal, (horizontal ? p.x : p.y) + shift2);
     }
     Sound.laserWarn();
+    tipOnce('laser');
   }
 
   function addLaser(horizontal, pos) {
@@ -3891,6 +4027,7 @@
       const y = view.H * spots[i + 1];
       if (!p || Math.hypot(x - p.x, y - p.y) >= CONFIG.MINE_SAFE_DISTANCE) {
         game.mines.push({ x: x, y: y, t: 0, exploded: false, ring: 0, beep: 0 });
+        tipOnce('mine');
         return;
       }
     }
@@ -3933,6 +4070,7 @@
       if (!p || Math.hypot(x - p.x, y - p.y) >= CONFIG.HOLE_SAFE_DISTANCE) {
         game.holes.push({ x: x, y: y, t: 0, rot: 0, caught: false });
         Sound.holeOpen();
+        tipOnce('hole');
         return;
       }
     }
@@ -4013,6 +4151,7 @@
       dead: false,
     });
     Sound.wallWarn();
+    tipOnce('wall');
   }
 
   function updateWalls(dt) {
@@ -4041,6 +4180,7 @@
         const angle = p ? Math.atan2(p.y - y, p.x - x) : 0;
         game.turrets.push({ x: x, y: y, t: 0, fire: CONFIG.TURRET_WARMUP, angle: angle, dead: false });
         addRing(x, y, 6, 60, 0.5, COLORS.turret, 2);
+        tipOnce('turret');
         return;
       }
     }
@@ -4441,6 +4581,7 @@
     addText(pu.x, pu.y - 28, info.name.toUpperCase() + ' !', info.color, 22, 1.1, -40);
     Sound.powerUp();
     if (pu.type === 'slow') Sound.slowStart();
+    tipOnce(pu.type);
   }
 
   // Bombe : une onde de choc détruit tous les dangers à l'écran (sauf lasers, trous noirs et boss)
@@ -4529,6 +4670,7 @@
       addText(p.x, p.y - 72, 'COMBO x' + mult + ' !', COLORS.combo, 18 + mult * 3, 1.1, -30, 'combo');
       addRing(p.x, p.y, p.r + 6, 70 + mult * 10, 0.45, COLORS.combo, 3);
       Sound.comboUp(mult);
+      tipOnce('combo');
     }
   }
 
@@ -4638,6 +4780,7 @@
         game.stats.grazes++;
         addText(p.x, p.y - 30, 'Frôlé ! +' + points, shipColor(), 15, 0.8, -40);
         Sound.graze();
+        tipOnce('graze');
       }
     }
 
@@ -4751,6 +4894,7 @@
       announce('Les tourelles ouvrent le feu !', COLORS.turret);
       game.turretTimer = 2;
     }
+    if ((game.level + 1) % CONFIG.BOSS_EVERY === 0) tipOnce('boss'); // boss au prochain niveau
     if (game.level % CONFIG.BOSS_EVERY === 0 && !game.boss.active) {
       const next = bossInfo(game.boss.number + 1);
       announce('ALERTE : ' + next.name.toUpperCase() + ' arrive ! Survis ' + next.duration + ' s', next.def.color);
@@ -4949,7 +5093,10 @@
       game.flash = Math.max(0, game.flash - dt * CONFIG.FLASH_DECAY);
     }
 
-    if (game.state === 'playing') updateToasts(dt);
+    if (game.state === 'playing') {
+      updateToasts(dt);
+      updateTips(dt);
+    }
 
     switch (game.state) {
       case 'menu': updateMenu(dt); break;

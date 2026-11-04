@@ -51,6 +51,12 @@
     <!-- Notification de succès (placée sous le score par game.js) -->
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
+    <!-- Astuce : la première fois qu'un élément apparaît (placée par game.js) -->
+    <div id="tip" class="tip hidden" role="status" aria-live="polite">
+      <span class="tip-label">Astuce</span>
+      <span class="tip-text" id="tip-text"></span>
+    </div>
+
     <!-- Tutoriel du premier lancement -->
     <div id="tuto" class="tuto hidden" role="status" aria-live="polite">
       <span class="tuto-step" id="tuto-step">Étape 1/3</span>
@@ -402,6 +408,14 @@
           <div class="setting">
             <span class="setting-name">Tutoriel</span>
             <button type="button" id="btn-tuto-again" class="btn btn-small">Revoir</button>
+          </div>
+          <label class="setting setting-check">
+            <span class="setting-name">Astuces <small>Une bulle explique chaque nouveauté, une seule fois</small></span>
+            <input type="checkbox" id="set-tips">
+          </label>
+          <div class="setting">
+            <span class="setting-name">Revoir les astuces</span>
+            <button type="button" id="btn-tips-again" class="btn btn-small">Revoir</button>
           </div>
         </div>
         <p class="version-line">Éclats Néon · version <span id="game-version">2.1</span></p>

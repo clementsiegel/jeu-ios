@@ -358,6 +358,40 @@ button {
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
+/* ---------- Astuce (première fois qu'un élément apparaît) ---------- */
+.tip {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 120px; /* repositionné par game.js sous le score, les bonus et la notification */
+  width: max-content;
+  max-width: min(88vw, 380px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 12px 8px;
+  border: 2px solid var(--line-2);
+  border-left: 6px solid var(--tip, var(--cyan));
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 4px 0 var(--ink);
+  pointer-events: none; /* ne bloque jamais le jeu */
+  transform: translateX(-50%);
+  animation: toast-in 0.25s ease-out both;
+}
+
+.tip-label {
+  font-family: var(--display);
+  font-size: 10px;
+  color: var(--tip, var(--cyan));
+}
+
+.tip-text {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 /* ---------- Tutoriel ---------- */
 .tuto {
   position: absolute;
@@ -1916,6 +1950,7 @@ kbd {
 /* Réglage "réduire les effets" et préférence du système : pas d'animation */
 .reduce-fx .pu-chip.ending,
 .reduce-fx .toast,
+.reduce-fx .tip,
 .reduce-fx .ship-tile.shake,
 .reduce-fx .theme-tile.shake,
 .reduce-fx #screen-gameover.visible .panel {
@@ -1925,6 +1960,7 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .pu-chip.ending,
   .toast,
+  .tip,
   .ship-tile.shake,
   .theme-tile.shake,
   #screen-gameover.visible .panel {
