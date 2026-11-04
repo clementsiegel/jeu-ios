@@ -366,6 +366,22 @@
   };
   const EXTRA_MODES = ['bossrush', 'extreme', 'chaos']; // records rangés ensemble
 
+  // Ce qui a touché le joueur : affiché sur l'écran de fin avec un conseil d'une phrase
+  const DEATH_CAUSES = {
+    shard:       { what: 'un éclat', tip: 'Les flèches au bord de l\'écran annoncent les éclats qui arrivent.' },
+    seeker:      { what: 'un traqueur', tip: 'Les traqueurs te suivent un moment : bouge sans arrêt, puis fais un dash.' },
+    bouncer:     { what: 'un rebondisseur', tip: 'Ils rebondissent sur les bords : ne reste pas collé au bord.' },
+    bullet:      { what: 'un tir de tourelle', tip: 'Les tourelles visent l\'endroit où tu es : continue de bouger.' },
+    laser:       { what: 'un laser', tip: 'Les lasers sont annoncés par une ligne : sors-en avant le tir.' },
+    mine:        { what: 'une mine', tip: 'Une mine touchée explose tout de suite : contourne-la.' },
+    'mine-ring': { what: 'l\'explosion d\'une mine', tip: 'Sors de la zone rouge, ou traverse l\'anneau avec un dash.' },
+    hole:        { what: 'un trou noir', tip: 'Le centre est mortel : fais un dash pour échapper à l\'attraction.' },
+    wall:        { what: 'un mur', tip: 'Repère le trou dès l\'alerte et place-toi en face avant que le mur arrive.' },
+    turret:      { what: 'une tourelle', tip: 'Le corps des tourelles est dangereux : garde tes distances.' },
+    boss:        { what: 'le boss', tip: 'Reste loin du boss : il s\'illumine avant chaque attaque.' },
+    beam:        { what: 'un rayon du boss', tip: 'Le rayon tourne dans le sens des flèches : pars dans l\'autre sens.' },
+  };
+
   // Boss : un nouveau à chaque fois, de plus en plus dur. Après le 5ᵉ, ils reviennent
   // en version II, III… (plus rapides, attaques plus serrées, un peu plus longs).
   //   duration : secondes à survivre · interval : rythme des attaques (plus petit = plus vite)
@@ -1166,6 +1182,7 @@
     bestTA: loadInt(CONFIG.STORAGE_KEY_TIMEATTACK), // record du contre-la-montre
     newModeRecord: false,
     endReason: 'death', // 'death' ou 'time' (fin du contre-la-montre)
+    deathCause: '',     // ce qui a touché le joueur (voir DEATH_CAUSES)
 
     // Boss de survie
     boss: createBoss(),
@@ -1491,6 +1508,7 @@
     game.newDailyRecord = false;
     game.newModeRecord = false;
     game.endReason = 'death';
+    game.deathCause = '';
     game.sessionAch = [];
     game.sessionMissions = [];
     game.sessionShips = [];
@@ -1834,6 +1852,9 @@
     hudBar: $('hud-bar'),
     hudBarFill: $('hud-bar-fill'),
     goTitle: $('go-title'),
+    goCause: $('go-cause'),
+    goCauseWhat: $('go-cause-what'),
+    goCauseTip: $('go-cause-tip'),
     goAch: $('go-ach'),
     toast: $('toast'),
     tuto: $('tuto'),
@@ -3189,11 +3210,12 @@
     setState('menu');
   }
 
-  // Le joueur est touché : bouclier, mode zen, ou fin de partie
-  function hitPlayer(x, y, hazard) {
+  // Le joueur est touché : bouclier, mode zen, ou fin de partie.
+  // cause : ce qui l'a touché (voir DEATH_CAUSES), affiché sur l'écran de fin
+  function hitPlayer(x, y, hazard, cause) {
     if (game.effects.shield > 0) absorbHit(x, y, hazard);
     else if (game.mode === 'zen') zenHit(x, y, hazard);
-    else killPlayer();
+    else killPlayer(cause);
   }
 
   // Mode zen : pas de mort, mais le combo et 100 points sont perdus
@@ -3210,9 +3232,10 @@
     Sound.zenHit();
   }
 
-  function killPlayer() {
+  function killPlayer(cause) {
     const p = game.player;
     p.alive = false;
+    game.deathCause = DEATH_CAUSES[cause] ? cause : '';
     clearPowerupEffects(); // les bonus s'arrêtent à la mort
     resetCombo();
     explode(p.x, p.y);
@@ -3249,6 +3272,14 @@
     if (game.diff !== 'normal') tag += (tag ? ' · ' : '') + diffInfo().label;
     ui.goScore.textContent = '0';
     ui.goTitle.textContent = game.endReason === 'time' ? 'TEMPS ÉCOULÉ !' : 'PARTIE TERMINÉE';
+    // Ce qui t'a touché, avec un conseil (pas en fin de contre-la-montre)
+    const cause = game.endReason === 'death' && mode !== 'zen' ? DEATH_CAUSES[game.deathCause] : null;
+    ui.goCause.classList.toggle('hidden', !cause);
+    if (cause) {
+      const who = game.deathCause === 'boss' ? 'le boss ' + game.boss.name : cause.what;
+      ui.goCauseWhat.textContent = 'Touché par : ' + who;
+      ui.goCauseTip.textContent = cause.tip;
+    }
     ui.goMode.classList.toggle('hidden', !tag);
     ui.goMode.textContent = tag;
     ui.goBestLabel.textContent = MODE_INFO[mode].record;
@@ -4591,7 +4622,7 @@
         continue;
       }
       if (!invincible && d2 < hitDist * hitDist) {
-        hitPlayer(h.x, h.y, h);
+        hitPlayer(h.x, h.y, h, h.type === 'splitter' ? 'shard' : h.type);
         return;
       }
       const grazeDist = hitDist + CONFIG.NEAR_MISS_MARGIN;
@@ -4617,7 +4648,7 @@
       if (!laserIsActive(l)) continue;
       const d = l.horizontal ? Math.abs(p.y - l.pos) : Math.abs(p.x - l.pos);
       if (d < CONFIG.LASER_WIDTH / 2 + pr * 0.6) {
-        hitPlayer(p.x, p.y, null);
+        hitPlayer(p.x, p.y, null, 'laser');
         return;
       }
     }
@@ -4628,11 +4659,11 @@
       if (!m.exploded) {
         if (d < CONFIG.MINE_RADIUS + pr) {
           m.t = CONFIG.MINE_ARM_TIME; // la mine touchée explose tout de suite
-          hitPlayer(m.x, m.y, null);
+          hitPlayer(m.x, m.y, null, 'mine');
           return;
         }
       } else if (Math.abs(d - m.ring) < CONFIG.MINE_RING_WIDTH / 2 + pr * 0.7) {
-        hitPlayer(p.x, p.y, null);
+        hitPlayer(p.x, p.y, null, 'mine-ring');
         return;
       }
     }
@@ -4640,7 +4671,7 @@
     // Centre des trous noirs
     for (const hole of game.holes) {
       if (holeStrength(hole) > 0.3 && Math.hypot(p.x - hole.x, p.y - hole.y) < CONFIG.HOLE_CORE + pr) {
-        hitPlayer(hole.x, hole.y, null);
+        hitPlayer(hole.x, hole.y, null, 'hole');
         return;
       }
     }
@@ -4652,7 +4683,7 @@
       const along = w.vertical ? p.y : p.x;
       if (Math.abs(across - w.pos) < CONFIG.WALL_THICKNESS / 2 + pr &&
           Math.abs(along - w.gap) > CONFIG.WALL_GAP / 2 - pr) {
-        hitPlayer(p.x, p.y, null);
+        hitPlayer(p.x, p.y, null, 'wall');
         return;
       }
     }
@@ -4660,7 +4691,7 @@
     // Tourelles : leur corps est dangereux
     for (const tu of game.turrets) {
       if (tu.t > 0.3 && Math.hypot(p.x - tu.x, p.y - tu.y) < CONFIG.TURRET_RADIUS + pr) {
-        hitPlayer(tu.x, tu.y, null);
+        hitPlayer(tu.x, tu.y, null, 'turret');
         return;
       }
     }
@@ -4668,7 +4699,7 @@
     // Boss : son corps et ses rayons tournants
     const b = game.boss;
     if (b.active && b.phase !== 'leave' && Math.hypot(p.x - b.x, p.y - b.y) < b.r * 0.8 + pr) {
-      hitPlayer(p.x, p.y, null);
+      hitPlayer(p.x, p.y, null, 'boss');
       return;
     }
     for (const bm of game.beams) {
@@ -4678,7 +4709,7 @@
       const along = dx * Math.cos(bm.angle) + dy * Math.sin(bm.angle);
       const perp = Math.abs(-dx * Math.sin(bm.angle) + dy * Math.cos(bm.angle));
       if (along > 0 && perp < CONFIG.BOSS_BEAM_WIDTH / 2 + pr * 0.6) {
-        hitPlayer(p.x, p.y, null);
+        hitPlayer(p.x, p.y, null, 'beam');
         return;
       }
     }

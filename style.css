@@ -1022,6 +1022,30 @@ kbd {
   font-size: 11px;
 }
 
+/* "Touché par : un laser" + conseil, sous le titre */
+.go-cause {
+  max-width: 440px;
+  margin: 12px auto 0;
+  padding: 4px 0 4px 12px;
+  border-left: 4px solid var(--pink);
+  text-align: left;
+}
+
+.go-cause-what {
+  display: block;
+  font-family: var(--display);
+  font-size: 13px;
+  color: var(--pink);
+}
+
+.go-cause-tip {
+  display: block;
+  margin-top: 3px;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
 .final-score {
   display: flex;
   flex-direction: column;
