@@ -29,7 +29,7 @@
   // Version du jeu, affichée dans les Réglages. À augmenter à chaque mise à jour :
   // grosse mise à jour 1.8 -> 1.9, petite correction 1.8 -> 1.81 -> 1.82.
   // Penser à mettre la même dans VERSION, en haut de sw.js (mode hors ligne).
-  const GAME_VERSION = '2.2';
+  const GAME_VERSION = '2.2.1';
 
   // --- Classement en ligne (Supabase) ---
   // Les 2 codes se trouvent dans Supabase, bouton "Connect" du projet
@@ -39,8 +39,8 @@
   // Cette clé peut être visible dans le code : classement-supabase.sql protège
   // les données. Laisser vide = classement désactivé.
   const ONLINE = {
-    URL: '',
-    KEY: '',
+    URL: 'https://wehtmowmsnsfhpvinfrz.supabase.co',
+    KEY: 'sb_publishable_PqnWcCSWI3iIIomcLVRAwQ_HMt61QGo',
   };
 
   const CONFIG = {
